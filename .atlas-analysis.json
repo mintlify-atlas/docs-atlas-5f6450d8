@@ -1,0 +1,110 @@
+{
+  "projectType": "frontend",
+  "projectName": "Particle Simulator",
+  "projectDescription": "A real-time particle simulation and visualization engine built with React and Three.js for defining complex trajectories through dynamic mathematical formulas.",
+  "theme": "palm",
+  "primaryColor": "#eb4846",
+  "lightColor": "#ece0bc",
+  "darkColor": "#264a4d",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/simulation-modes",
+              "concepts/particles",
+              "concepts/forces",
+              "concepts/visualization"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/formula-syntax",
+              "guides/particle-editor",
+              "guides/events",
+              "guides/configuration",
+              "guides/controls"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Physics Guide",
+        "groups": [
+          {
+            "group": "Fundamentals",
+            "pages": [
+              "physics/kinematics-vs-dynamics",
+              "physics/velocity-verlet",
+              "physics/coordinate-system",
+              "physics/gravity-friction"
+            ]
+          },
+          {
+            "group": "Force Formulas",
+            "pages": [
+              "physics/force-equations",
+              "physics/available-functions",
+              "physics/trajectory-examples"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Data Structures",
+            "pages": [
+              "reference/particle-data",
+              "reference/force-system",
+              "reference/event-system"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "reference/components/escenario",
+              "reference/components/particle",
+              "reference/components/gui",
+              "reference/components/visualization"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Real-time particle physics simulation with custom force equations",
+    "Mathematical formula evaluation supporting trigonometry, hyperbolic functions, and operators",
+    "3D visualization with particle trails, force vectors, and coordinate axes",
+    "Interactive GUI for particle creation, editing, and simulation control",
+    "Dual simulation modes: kinematic (massless) and dynamic (mass-based)",
+    "Event system with conditional triggers for pause and color changes",
+    "Ground collision detection with friction simulation",
+    "Configuration import/export for saving and loading scenarios",
+    "Velocity Verlet integration for accurate physics calculations"
+  ],
+  "publicApiSurface": [
+    "evaluarFormula(formula, t, x, y, z) - Dynamic formula evaluation engine",
+    "PData interface - Particle data structure with position, velocity, forces, mass, events",
+    "Force interface - Force vectors defined by mathematical formulas",
+    "ParticleEvent interface - Event system with conditions and actions",
+    "Simulation controls - play/pause, reset, gravity toggle, friction adjustment",
+    "Visualization modes - particle trails, force arrows (off/resultant/individual), axes, grid",
+    "Mathematical functions - sin, cos, tan, sinh, cosh, tanh, sqrt, log, abs, min, max, random",
+    "Configuration format - JSON save/load with settings and particle definitions"
+  ]
+}
