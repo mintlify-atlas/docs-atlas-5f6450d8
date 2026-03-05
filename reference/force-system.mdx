@@ -1,0 +1,286 @@
+---
+title: 'Force System'
+description: 'Define and apply forces to particles using mathematical formulas'
+---
+
+## Overview
+
+The force system allows you to define custom forces applied to particles using mathematical formulas. Forces can be constant, time-dependent, position-dependent, or any combination, enabling complex physical behaviors.
+
+## Force Interface
+
+```typescript
+export interface Force {
+  id: number;
+  vec: [string, string, string];
+}
+```
+
+## Fields
+
+<ParamField path="id" type="number" required>
+  Unique identifier for the force. Used to distinguish between multiple forces on the same particle.
+  
+  ```json
+  "id": 1
+  ```
+</ParamField>
+
+<ParamField path="vec" type="[string, string, string]" required>
+  Force vector as an array of three formula strings `[Fx, Fy, Fz]` representing the force components in x, y, and z directions.
+  
+  Each formula is evaluated at runtime and can reference:
+  - `t` - elapsed simulation time
+  - `x`, `y`, `z` - current particle position
+  - All `Math` functions (sin, cos, tan, abs, sqrt, exp, log, etc.)
+  - Mathematical operators (+, -, *, /, ^, **)
+  
+  ```json
+  "vec": ["-x * 0.5", "-y * 0.5", "20 * sin(t)"]
+  ```
+</ParamField>
+
+## Formula Evaluation
+
+### Available Variables
+
+<ResponseField name="t" type="number">
+  Elapsed simulation time in seconds. Increases by `deltaT` each step.
+  
+  ```javascript
+  "10 * sin(t)"  // Oscillating force with time
+  ```
+</ResponseField>
+
+<ResponseField name="x" type="number">
+  Current x-position of the particle.
+  
+  ```javascript
+  "-0.5 * x"  // Spring force proportional to displacement
+  ```
+</ResponseField>
+
+<ResponseField name="y" type="number">
+  Current y-position of the particle.
+  
+  ```javascript
+  "-2 * y"  // Restoring force toward y=0
+  ```
+</ResponseField>
+
+<ResponseField name="z" type="number">
+  Current z-position of the particle.
+  
+  ```javascript
+  "-z * 0.1"  // Damping force in z-direction
+  ```
+</ResponseField>
+
+### Supported Math Functions
+
+All JavaScript `Math` functions are available:
+
+- **Trigonometric**: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`
+- **Hyperbolic**: `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`
+- **Exponential**: `exp`, `log`, `log10`, `log2`
+- **Power**: `pow`, `sqrt`, `cbrt`
+- **Rounding**: `floor`, `ceil`, `round`, `trunc`
+- **Other**: `abs`, `sign`, `min`, `max`, `random`
+- **Constants**: `PI`, `E`
+
+### Operators
+
+- Addition: `+`
+- Subtraction: `-`
+- Multiplication: `*`
+- Division: `/`
+- Exponentiation: `**` or `^`
+- Parentheses: `()`
+
+## Force Combination
+
+When multiple forces are applied to a particle, they are combined using vector addition:
+
+1. Each force's `vec` formulas are evaluated using current `t`, `x`, `y`, `z`
+2. All x-components are summed: `F_net_x = F1_x + F2_x + ...`
+3. All y-components are summed: `F_net_y = F1_y + F2_y + ...`
+4. All z-components are summed: `F_net_z = F1_z + F2_z + ...`
+5. Net force is applied: `a = F_net / mass`
+
+<Note>
+  Forces defined in the particle's `forces` array are combined with the legacy `fx`, `fy`, `fz` fields if present.
+</Note>
+
+## Examples
+
+### Constant Force
+
+```json
+{
+  "id": 1,
+  "vec": ["10", "0", "0"]
+}
+```
+
+Applies a constant 10 N force in the positive x-direction.
+
+### Damping Force
+
+```json
+{
+  "id": 2,
+  "vec": ["-0.5 * x", "-0.5 * y", "-0.5 * z"]
+}
+```
+
+Creates a damping effect proportional to distance from origin, simulating a spring force.
+
+### Time-Varying Force
+
+```json
+{
+  "id": 3,
+  "vec": ["20 * cos(t)", "20 * sin(t)", "0"]
+}
+```
+
+Circular force that rotates in the xy-plane over time.
+
+### Complex Attractor Force
+
+```json
+{
+  "id": 1,
+  "vec": [
+    "-x * abs(cos(t*0.2))",
+    "-y * abs(cos(t*0.2))",
+    "-z * 0.5 + 20 * tanh(sin(t + 0.31))"
+  ]
+}
+```
+
+From default.json - creates a pulsating attractor with oscillating z-component.
+
+### Gravitational Force
+
+```json
+{
+  "id": 5,
+  "vec": ["0", "-9.8 * mass", "0"]
+}
+```
+
+<Warning>
+  This is redundant if global gravity is enabled. Use for custom gravity scenarios.
+</Warning>
+
+### Drag Force
+
+```json
+{
+  "id": 6,
+  "vec": [
+    "-0.1 * vx * abs(vx)",
+    "-0.1 * vy * abs(vy)",
+    "-0.1 * vz * abs(vz)"
+  ]
+}
+```
+
+<Note>
+  Currently, velocity variables `vx`, `vy`, `vz` are not directly available in force formulas. This is a limitation of the current implementation.
+</Note>
+
+## Use Cases
+
+### Spring Systems
+
+Create harmonic oscillators by using position-dependent restoring forces:
+
+```json
+{
+  "forces": [
+    {
+      "id": 1,
+      "vec": ["-10 * x", "-10 * y", "0"]
+    }
+  ]
+}
+```
+
+### Central Force Fields
+
+Simulate planetary motion or charged particle behavior:
+
+```json
+{
+  "forces": [
+    {
+      "id": 1,
+      "vec": [
+        "-100 * x / pow(x*x + y*y + z*z, 1.5)",
+        "-100 * y / pow(x*x + y*y + z*z, 1.5)",
+        "-100 * z / pow(x*x + y*y + z*z, 1.5)"
+      ]
+    }
+  ]
+}
+```
+
+### Pulsating Fields
+
+Create time-varying force magnitudes:
+
+```json
+{
+  "forces": [
+    {
+      "id": 1,
+      "vec": [
+        "-x * (1 + 0.5 * sin(t))",
+        "-y * (1 + 0.5 * sin(t))",
+        "0"
+      ]
+    }
+  ]
+}
+```
+
+### Vortex Motion
+
+Create swirling trajectories:
+
+```json
+{
+  "forces": [
+    {
+      "id": 1,
+      "vec": [
+        "-y - 0.1 * x",
+        "x - 0.1 * y",
+        "-z * 0.5"
+      ]
+    }
+  ]
+}
+```
+
+## Performance Considerations
+
+### Formula Caching
+
+Formulas are compiled and cached on first use. Subsequent evaluations reuse the compiled function, making repeated calculations efficient.
+
+### Complexity
+
+Complex formulas with many function calls may impact performance when simulating many particles. Keep formulas as simple as possible for real-time simulation.
+
+### Error Handling
+
+If a formula evaluation fails (division by zero, invalid syntax, etc.), the force component returns `0` and simulation continues.
+
+## Related
+
+- [PData Interface](/reference/particle-data) - Complete particle structure
+- [Configuration Guide](/guides/configuration) - Configure forces in configuration files
+- [Physics Update](/reference/components/visualization) - Underlying physics calculations

@@ -1,0 +1,259 @@
+---
+title: Velocity Verlet Integration
+description: The numerical integration algorithm used for dynamic particle simulation
+---
+
+The Particle Simulator uses the **Velocity Verlet algorithm** for numerical integration in dynamic mode. This algorithm provides excellent stability, accuracy, and energy conservation for particle dynamics.
+
+## Why Velocity Verlet?
+
+Velocity Verlet is a symplectic integrator that offers several advantages over simpler methods:
+
+- **Better energy conservation**: Maintains total energy over long simulations
+- **Higher accuracy**: Second-order accuracy (O(dt²)) in position
+- **Time-reversible**: Running backward gives the same trajectory
+- **Stable**: Doesn't amplify errors over time
+- **Explicit**: No need to solve equations at each step
+
+These properties make it ideal for physics simulations where realistic, stable motion is essential.
+
+## The Algorithm
+
+Velocity Verlet updates position and velocity using a three-step process:
+
+### Step 1: Update Position
+
+Use the **current velocity and previous acceleration** to calculate the new position:
+
+```
+r(t + Δt) = r(t) + v(t)·Δt + ½·a(t)·Δt²
+```
+
+```tsx
+// From PhysicsUpdate.tsx lines 129-139
+// VELOCITY VERLET - PASO 1:
+// Actualización de Posición usando aceleración del frame anterior
+const accOld = live.acc; // Aceleración del frame anterior
+
+posFinal = [
+  live.pos[0] + live.vel[0] * dT + 0.5 * accOld[0] * dT * dT,
+  live.pos[1] + live.vel[1] * dT + 0.5 * accOld[1] * dT * dT,
+  live.pos[2] + live.vel[2] * dT + 0.5 * accOld[2] * dT * dT,
+];
+```
+
+<Note>
+The acceleration from the **previous frame** (`accOld`) is used here. This is stored in `live.acc` and updated at the end of each frame.
+</Note>
+
+### Step 2: Calculate New Acceleration
+
+Evaluate forces at the **new position** and compute acceleration using F = ma:
+
+```
+a(t + Δt) = F(r(t + Δt)) / m
+```
+
+```tsx
+// From PhysicsUpdate.tsx lines 141-252
+// VELOCITY VERLET - PASO 2:
+// Cálculo de Nueva Aceleración en la nueva posición
+
+// Calculate sum of all applied forces at the NEW position
+const sumF = p.forces.reduce(
+  (acc, f) => {
+    const fx = evaluarFormula(
+      f.vec[0],
+      nt,           // new time
+      posFinal[0],  // new position
+      posFinal[1],
+      posFinal[2]
+    );
+    const fy = evaluarFormula(f.vec[1], nt, posFinal[0], posFinal[1], posFinal[2]);
+    const fz = evaluarFormula(f.vec[2], nt, posFinal[0], posFinal[1], posFinal[2]);
+    return [acc[0] + fx, acc[1] + fy, acc[2] + fz];
+  },
+  [0, 0, 0]
+);
+
+const m = p.mass || 0.001;
+const peso = m * g_val; // Gravitational force (weight)
+
+// Apply friction forces if on ground (see gravity-friction.mdx)
+// ...
+
+// Calculate new acceleration
+accNew = [
+  fuerzaResultanteX / m,
+  fuerzaResultanteY / m,
+  fuerzaResultanteZ / m - g_val,
+];
+```
+
+<Note>
+Forces are evaluated at the **new position** `posFinal`, not the old position. This is crucial for accuracy when forces depend on position (like springs or gravity fields).
+</Note>
+
+### Step 3: Update Velocity
+
+Use the **average of old and new accelerations** to update velocity:
+
+```
+v(t + Δt) = v(t) + ½·[a(t) + a(t + Δt)]·Δt
+```
+
+```tsx
+// From PhysicsUpdate.tsx lines 259-268
+// VELOCITY VERLET - PASO 3:
+// Actualización de Velocidad usando promedio de aceleraciones
+velFinal = [
+  live.vel[0] + 0.5 * (accOld[0] + accNew[0]) * dT,
+  live.vel[1] + 0.5 * (accOld[1] + accNew[1]) * dT,
+  live.vel[2] + 0.5 * (accOld[2] + accNew[2]) * dT,
+];
+```
+
+Finally, the new acceleration is stored for the next frame:
+
+```tsx
+// From PhysicsUpdate.tsx line 298
+live.acc = accNew; // Guardar aceleración para el siguiente frame
+```
+
+## Complete Implementation
+
+Here's the full Velocity Verlet loop from `PhysicsUpdate.tsx`:
+
+```tsx
+// Initial state (from previous frame)
+const accOld = live.acc;  // a(t)
+const pos = live.pos;     // r(t)  
+const vel = live.vel;     // v(t)
+
+// Step 1: Update position
+posFinal = [
+  pos[0] + vel[0] * dT + 0.5 * accOld[0] * dT * dT,
+  pos[1] + vel[1] * dT + 0.5 * accOld[1] * dT * dT,
+  pos[2] + vel[2] * dT + 0.5 * accOld[2] * dT * dT,
+];
+
+// Step 2: Evaluate forces at new position
+const F = evaluateAllForces(posFinal, nt);
+accNew = [
+  F[0] / mass,
+  F[1] / mass,
+  F[2] / mass - g_val,
+];
+
+// Step 3: Update velocity using average acceleration  
+velFinal = [
+  vel[0] + 0.5 * (accOld[0] + accNew[0]) * dT,
+  vel[1] + 0.5 * (accOld[1] + accNew[1]) * dT,
+  vel[2] + 0.5 * (accOld[2] + accNew[2]) * dT,
+];
+
+// Store state for next frame
+live.pos = posFinal;
+live.vel = velFinal;
+live.acc = accNew;  // This becomes accOld in the next frame
+```
+
+## Comparison with Euler Method
+
+The simpler **Forward Euler** method would be:
+
+```typescript
+// Forward Euler (NOT used - less accurate)
+a = F / m;
+vel = vel + a * dt;      // Update velocity
+pos = pos + vel * dt;    // Update position
+```
+
+**Problems with Euler:**
+- First-order accuracy O(dt) vs Velocity Verlet's O(dt²)
+- Energy tends to increase over time (not conservative)
+- Less stable for stiff systems
+- Requires smaller time steps for accuracy
+
+**Why Velocity Verlet is better:**
+
+| Property | Forward Euler | Velocity Verlet |
+|----------|--------------|----------------|
+| Accuracy | O(dt) | O(dt²) |
+| Energy drift | Increases | Oscillates (bounded) |
+| Stability | Poor for large dt | Good |
+| Symplectic | ❌ | ✅ |
+| Time-reversible | ❌ | ✅ |
+
+## Benefits for Particle Simulation
+
+### 1. Energy Conservation
+
+For a simple harmonic oscillator, Velocity Verlet maintains total energy within numerical precision:
+
+```
+E = ½mv² + ½kx²  ≈ constant
+```
+
+Euler integration would show exponential energy growth.
+
+### 2. Stable Long Simulations
+
+You can run simulations for thousands of frames without accumulating significant error. This is crucial for:
+
+- Orbital mechanics
+- Pendulum motion
+- Spring systems
+- Particle collisions
+
+### 3. Accurate Force Evaluation
+
+By evaluating forces at the **new position** (Step 2), position-dependent forces like springs are handled more accurately:
+
+```typescript
+// Spring force: F = -k(x - x₀)
+// Evaluated at the new position posFinal[0], not old position
+const fx = evaluarFormula(f.vec[0], nt, posFinal[0], posFinal[1], posFinal[2]);
+```
+
+### 4. Compatible with Constraints
+
+Velocity Verlet works well with constraints like ground collision and friction. The algorithm naturally handles:
+
+- Position constraints (z ≥ 0 for ground)
+- Velocity constraints (no penetration)
+- Force modifications (friction, normal force)
+
+<Warning>
+The time step `dT` still affects accuracy. For very fast-moving particles or stiff forces, you may need to reduce `dT` below the default 0.01 seconds. Use the Delta T control in the GUI to adjust this.
+</Warning>
+
+## Initial Conditions
+
+When a particle is created or reset, the acceleration is initialized to zero:
+
+```tsx
+// From Escenario.tsx line 76
+physicsRefs.current[id] = {
+  pos: [x, y, z],
+  vel: [0, 0, 0],
+  acc: [0, 0, 0], // Aceleración inicial para Velocity Verlet
+  t: 0,
+  trail: [[y, z, x]],
+  frameCount: 0,
+};
+```
+
+On the first frame, `accOld = [0, 0, 0]`, so the position update reduces to:
+
+```
+r(dt) = r(0) + v(0)·dt
+```
+
+This is correct—with no initial acceleration, the particle moves with constant velocity for the first time step.
+
+## Further Reading
+
+- [Verlet Integration (Wikipedia)](https://en.wikipedia.org/wiki/Verlet_integration)
+- [Symplectic Integrators](https://en.wikipedia.org/wiki/Symplectic_integrator)
+- Hairer, Lubich, Wanner: "Geometric Numerical Integration"

@@ -1,0 +1,656 @@
+---
+title: 'Configuration System'
+description: 'Save, load, and share simulator configurations'
+icon: 'floppy-disk'
+---
+
+## Overview
+
+The configuration system allows you to save complete simulation setups to JSON files and reload them later. This is perfect for:
+
+- **Saving experiments** for future analysis
+- **Sharing simulations** with colleagues or students
+- **Creating demonstrations** that can be reliably reproduced
+- **Building libraries** of interesting particle behaviors
+
+## Configuration File Format
+
+Configurations are stored as JSON files with the following structure:
+
+```typescript GUI.tsx
+interface SavedConfig {
+  version: string;      // Format version ("1.0")
+  timestamp: string;    // ISO 8601 timestamp
+  settings: {
+    gravity: boolean;   // Gravity enabled/disabled
+    friction: number;   // Ground friction coefficient
+    deltaT: number;     // Time step size
+    path: boolean;      // Trail visualization enabled
+    axes: boolean;      // Axes display enabled
+  };
+  particulas: PData[];  // Array of particle configurations
+}
+```
+
+<Info>
+The configuration format is designed to be human-readable. You can edit JSON files manually if needed.
+</Info>
+
+## Saving Configurations
+
+### Using the Save Button
+
+1. Configure your simulation (particles, forces, settings)
+2. Click the **"SAVE"** button in the GUI
+3. A JSON file will automatically download
+
+### Save Implementation
+
+```typescript GUI.tsx
+const handleSaveConfig = () => {
+  const config: SavedConfig = {
+    version: "1.0",
+    timestamp: new Date().toISOString(),
+    settings: {
+      gravity: p.gravity,
+      friction: p.friction,
+      deltaT: p.deltaT,
+      path: p.path,
+      axes: p.axes,
+    },
+    particulas: p.particulas,
+  };
+
+  const blob = new Blob([JSON.stringify(config, null, 2)], { 
+    type: "application/json" 
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `physics-config-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+```
+
+### File Naming Convention
+
+Files are automatically named with the format:
+```text
+physics-config-YYYY-MM-DD.json
+```
+
+**Example:** `physics-config-2026-03-05.json`
+
+<Tip>
+Rename saved files with descriptive names like `projectile-motion.json` or `spring-oscillator.json` for easier organization.
+</Tip>
+
+## Loading Configurations
+
+### Using the Load Button
+
+1. Click the **"LOAD"** button in the GUI
+2. Select a JSON configuration file from your computer
+3. The simulation will reset and load the configuration
+
+### Load Implementation
+
+```typescript GUI.tsx
+const handleLoadConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const config: SavedConfig = JSON.parse(event.target?.result as string);
+      if (p.onLoadConfig) {
+        p.onLoadConfig(config);
+      }
+    } catch (err) {
+      alert("Error loading configuration file");
+    }
+  };
+  reader.readAsText(file);
+  
+  // Reset input to allow loading same file again
+  e.target.value = "";
+};
+```
+
+<Warning>
+Loading a configuration **replaces all current particles** and resets the simulation. Save your current work first if needed.
+</Warning>
+
+## Example Configuration
+
+Here's a real configuration from the included example (`default.json`):
+
+<CodeGroup>
+
+```json Complete Example
+{
+  "version": "1.0",
+  "timestamp": "2026-01-05T19:30:00.000Z",
+  "settings": {
+    "gravity": true,
+    "frictionStatic": 0.4,
+    "frictionKinetic": 0.3,
+    "deltaT": 0.076,
+    "path": false,
+    "axes": false,
+    "forceMode": 1,
+    "showInfo": false
+  },
+  "particulas": [
+    {
+      "id": 9001,
+      "color": "#ff00ff",
+      "mass": 5,
+      "p0_fis": [20, 0, 0],
+      "v0_fis": [0, 8, 0],
+      "forces": [
+        {
+          "id": 1,
+          "vec": [
+            "-x * abs(cos(t*0.2))",
+            "-y * abs(cos(t*0.2))",
+            "-z * 0.5 + 20 * tanh(sin(t + 0.31))"
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+```json Minimal Example
+{
+  "version": "1.0",
+  "timestamp": "2026-03-05T12:00:00.000Z",
+  "settings": {
+    "gravity": true,
+    "friction": 0.2,
+    "deltaT": 0.01,
+    "path": true,
+    "axes": true
+  },
+  "particulas": [
+    {
+      "id": 1001,
+      "color": "#00ff00",
+      "mass": 1,
+      "p0_fis": [0, 0, 10],
+      "v0_fis": [10, 0, 10],
+      "a0_fis": [0, 0, 0],
+      "fx": "0",
+      "fy": "0",
+      "fz": "0",
+      "curr_fis": [0, 0, 10],
+      "curr_vel": [10, 0, 10],
+      "t": 0,
+      "trail_three": [[0, 10, 0]],
+      "enSuelo": false,
+      "isMassless": false,
+      "forces": [],
+      "events": []
+    }
+  ]
+}
+```
+
+```json With Events
+{
+  "version": "1.0",
+  "timestamp": "2026-03-05T12:00:00.000Z",
+  "settings": {
+    "gravity": true,
+    "friction": 0.2,
+    "deltaT": 0.01,
+    "path": true,
+    "axes": false
+  },
+  "particulas": [
+    {
+      "id": 2001,
+      "color": "#ff0000",
+      "mass": 2,
+      "p0_fis": [0, 0, 20],
+      "v0_fis": [15, 0, 0],
+      "isMassless": false,
+      "forces": [],
+      "events": [
+        {
+          "id": 3001,
+          "name": "Ground Impact",
+          "conditions": [
+            {
+              "variable": "z",
+              "operator": "<=",
+              "value": 0
+            }
+          ],
+          "conditionLogic": "AND",
+          "actions": [
+            {
+              "type": "pause"
+            },
+            {
+              "type": "changeColor",
+              "payload": "#ffff00"
+            }
+          ],
+          "triggered": false,
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+</CodeGroup>
+
+## Particle Data Structure
+
+Each particle in the configuration includes:
+
+```typescript PData Interface
+export interface PData {
+  id: number;                              // Unique identifier
+  p0_fis: [number, number, number];        // Initial position [x, y, z]
+  v0_fis: [number, number, number];        // Initial velocity [vx, vy, vz]
+  a0_fis: [number, number, number];        // Initial acceleration
+  fx: string;                              // X position function (kinematics)
+  fy: string;                              // Y position function (kinematics)
+  fz: string;                              // Z position function (kinematics)
+  curr_fis: [number, number, number];      // Current position
+  curr_vel: [number, number, number];      // Current velocity
+  t: number;                               // Elapsed time
+  trail_three: [number, number, number][]; // Trail points
+  enSuelo: boolean;                        // On ground flag
+  color: string;                           // Hex color code
+  mass: number;                            // Mass in kg
+  isMassless: boolean;                     // Kinematics vs dynamics mode
+  forces: Force[];                         // Array of forces
+  events: ParticleEvent[];                 // Array of events
+}
+```
+
+### Force Structure
+
+```typescript Force Interface
+export interface Force {
+  id: number;                    // Unique identifier
+  vec: [string, string, string]; // Formula for [Fx, Fy, Fz]
+}
+```
+
+### Event Structure (in Config)
+
+See the [Events Guide](/guides/events) for complete details on event structure.
+
+## Loading the Example Configuration
+
+The simulator includes a pre-configured example showing advanced force dynamics:
+
+### Using the View Example Button
+
+1. Click **"VIEW EXAMPLE"** in the GUI
+2. The default configuration loads from `/public/default.json`
+3. Explore 20 particles in a pulsing vortex formation
+
+### Example Implementation
+
+```typescript GUI.tsx
+const handleLoadExample = async () => {
+  try {
+    const response = await fetch('/default.json');
+    const config: SavedConfig = await response.json();
+    if (p.onLoadConfig) {
+      p.onLoadConfig(config);
+    }
+  } catch (err) {
+    alert("Error loading example");
+  }
+};
+```
+
+### What the Example Demonstrates
+
+- **20 particles** arranged in a circular formation
+- **Complex force formulas** with time and position dependencies
+- **Pulsing vortex behavior** using hyperbolic functions
+- **Color gradation** from magenta through blue to cyan
+- **Phase offsets** creating wave-like motion patterns
+
+<Tip>
+Study the example configuration to learn advanced formula techniques and force composition.
+</Tip>
+
+## Configuration Loading Process
+
+When a configuration loads, the simulator:
+
+```typescript Escenario.tsx
+const handleLoadConfig = (config: any) => {
+  // 1. Apply global settings
+  if (config.settings) {
+    setGrav(config.settings.gravity ?? true);
+    setFriction(config.settings.friction ?? 0.2);
+    setDT(config.settings.deltaT ?? 0.01);
+    setPath(config.settings.path ?? true);
+    setShowAxes(config.settings.axes ?? true);
+  }
+
+  // 2. Clear existing particle references
+  if (config.particulas && Array.isArray(config.particulas)) {
+    Object.keys(physicsRefs.current).forEach((key) => {
+      delete physicsRefs.current[Number(key)];
+    });
+    Object.keys(meshRefs.current).forEach((key) => {
+      delete meshRefs.current[Number(key)];
+    });
+
+    // 3. Create new particles with unique IDs
+    const nuevasParticulas = config.particulas.map((p: any) => {
+      const newId = Date.now() + Math.random() * 1000;
+      const newPart = {
+        ...p,
+        id: newId,
+        t: 0,
+        enSuelo: false,
+        trail_three: [[p.p0_fis[1], p.p0_fis[2], p.p0_fis[0]]],
+      };
+      
+      // 4. Initialize physics state
+      physicsRefs.current[newId] = {
+        pos: [p.p0_fis[0], p.p0_fis[1], p.p0_fis[2]],
+        vel: [p.v0_fis[0], p.v0_fis[1], p.v0_fis[2]],
+        acc: [0, 0, 0],
+        t: 0,
+        trail: [[p.p0_fis[1], p.p0_fis[2], p.p0_fis[0]]],
+        frameCount: 0,
+      };
+      
+      return newPart;
+    });
+
+    setParts(nuevasParticulas);
+  }
+
+  // 5. Stop simulation
+  setRun(false);
+};
+```
+
+<Note>
+Particle IDs are regenerated during loading to prevent conflicts. The saved ID values are not preserved.
+</Note>
+
+## Creating Configuration Templates
+
+### Projectile Motion Template
+
+```json projectile-template.json
+{
+  "version": "1.0",
+  "timestamp": "2026-03-05T12:00:00.000Z",
+  "settings": {
+    "gravity": true,
+    "friction": 0,
+    "deltaT": 0.01,
+    "path": true,
+    "axes": true
+  },
+  "particulas": [
+    {
+      "id": 1000,
+      "color": "#00ff00",
+      "mass": 1,
+      "p0_fis": [0, 0, 0],
+      "v0_fis": [20, 0, 15],
+      "isMassless": false,
+      "forces": [],
+      "events": [
+        {
+          "id": 2000,
+          "name": "Landing",
+          "conditions": [{"variable": "z", "operator": "<=", "value": 0}],
+          "conditionLogic": "AND",
+          "actions": [{"type": "pause"}],
+          "triggered": false,
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Spring Oscillator Template
+
+```json spring-template.json
+{
+  "version": "1.0",
+  "timestamp": "2026-03-05T12:00:00.000Z",
+  "settings": {
+    "gravity": false,
+    "friction": 0,
+    "deltaT": 0.001,
+    "path": true,
+    "axes": true
+  },
+  "particulas": [
+    {
+      "id": 1000,
+      "color": "#ff00ff",
+      "mass": 1,
+      "p0_fis": [10, 0, 0],
+      "v0_fis": [0, 0, 0],
+      "isMassless": false,
+      "forces": [
+        {
+          "id": 1001,
+          "vec": ["-10*x", "-10*y", "-10*z"]
+        }
+      ],
+      "events": []
+    }
+  ]
+}
+```
+
+### Circular Motion Template
+
+```json circular-template.json
+{
+  "version": "1.0",
+  "timestamp": "2026-03-05T12:00:00.000Z",
+  "settings": {
+    "gravity": false,
+    "friction": 0,
+    "deltaT": 0.01,
+    "path": true,
+    "axes": false
+  },
+  "particulas": [
+    {
+      "id": 1000,
+      "color": "#00ffff",
+      "mass": 1,
+      "p0_fis": [0, 0, 0],
+      "v0_fis": [0, 0, 0],
+      "isMassless": true,
+      "fx": "10*cos(t)",
+      "fy": "10*sin(t)",
+      "fz": "0",
+      "forces": [],
+      "events": []
+    }
+  ]
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+
+<Accordion title="Use descriptive filenames">
+Name files based on the simulation content:
+
+✅ Good:
+- `double-pendulum.json`
+- `planetary-orbits.json`
+- `damped-oscillator.json`
+
+❌ Bad:
+- `physics-config-2026-03-05.json` (date only)
+- `test.json` (too generic)
+- `config1.json` (not descriptive)
+</Accordion>
+
+<Accordion title="Add metadata in comments">
+While JSON doesn't support comments, use descriptive field names:
+
+```json
+{
+  "version": "1.0",
+  "timestamp": "2026-03-05T12:00:00.000Z",
+  "particulas": [
+    {
+      "id": 1000,
+      "color": "#00ff00",
+      "mass": 5,
+      "p0_fis": [0, 0, 20],
+      ...
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Version your configurations">
+Include version numbers in filenames for iterative work:
+
+- `spring-system-v1.json`
+- `spring-system-v2-damped.json`
+- `spring-system-v3-final.json`
+</Accordion>
+
+<Accordion title="Create a library">
+Organize configurations by category:
+
+```text
+configurations/
+├── mechanics/
+│   ├── projectile-motion.json
+│   ├── circular-motion.json
+│   └── spring-oscillator.json
+├── demonstrations/
+│   ├── lissajous-curves.json
+│   └── chaos-pendulum.json
+└── experiments/
+    ├── friction-study.json
+    └── collision-test.json
+```
+</Accordion>
+
+<Accordion title="Test before sharing">
+Before sharing a configuration:
+1. Load it in a fresh simulator instance
+2. Verify all particles appear correctly
+3. Check that forces/events work as expected
+4. Test that visual settings are appropriate
+</Accordion>
+
+</AccordionGroup>
+
+## Troubleshooting
+
+### "Error loading configuration file"
+
+**Possible causes:**
+1. Invalid JSON syntax (missing comma, bracket, etc.)
+2. Corrupted file
+3. Wrong file type selected
+
+**Solution:** Validate JSON using a tool like [JSONLint](https://jsonlint.com/)
+
+### Particles appear at wrong positions
+
+**Check:**
+1. `p0_fis` values are in correct order: [x, y, z]
+2. Coordinate system understanding (Z is vertical)
+3. Values are numbers, not strings
+
+### Forces don't work as expected
+
+**Verify:**
+1. `isMassless` is set to `false` for dynamics mode
+2. Force formulas have correct syntax
+3. `mass` value is reasonable (not 0 or extremely large)
+
+### Events don't trigger
+
+**Check:**
+1. `enabled` is set to `true`
+2. `triggered` is set to `false`
+3. Condition values are achievable
+4. See [Events Guide](/guides/events#troubleshooting) for more
+
+## Manual Editing
+
+Configuration files can be edited manually in any text editor:
+
+### Tips for Manual Editing
+
+1. **Use a JSON-aware editor** (VS Code, Sublime Text, etc.)
+2. **Validate after editing** using a JSON validator
+3. **Maintain structure** - don't remove required fields
+4. **Be careful with numbers** - avoid strings where numbers are expected
+5. **Test incrementally** - make small changes and test
+
+### Common Manual Edits
+
+**Bulk color change:**
+```json
+// Change all particles to blue
+"particulas": [
+  { ..., "color": "#0000ff" },
+  { ..., "color": "#0000ff" },
+  { ..., "color": "#0000ff" }
+]
+```
+
+**Adjust all masses:**
+```json
+// Double all masses
+"particulas": [
+  { ..., "mass": 10 },  // was 5
+  { ..., "mass": 4 },   // was 2
+  { ..., "mass": 2 }    // was 1
+]
+```
+
+**Disable all events:**
+```json
+"events": [
+  { ..., "enabled": false },
+  { ..., "enabled": false }
+]
+```
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Particle Editor" icon="pen-to-square" href="/guides/particle-editor">
+    Create and configure particles before saving
+  </Card>
+  <Card title="Formula Syntax" icon="function" href="/guides/formula-syntax">
+    Understand force and function formulas in configs
+  </Card>
+</CardGroup>

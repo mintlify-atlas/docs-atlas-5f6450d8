@@ -1,0 +1,194 @@
+---
+title: Particula Component
+description: Individual particle rendering component
+---
+
+## Overview
+
+The `Particula` component renders individual particles as spheres in the Three.js scene. It's a simple, optimized component that forwards refs to allow direct mesh manipulation by the physics system.
+
+**File**: `src/Particula/Particula.tsx`
+
+## Component Definition
+
+```typescript
+import { forwardRef } from "react";
+import { Mesh } from "three";
+
+interface Props {
+  posicion: [number, number, number];
+  color?: string;
+  radius?: number;
+}
+
+const Particula = forwardRef<Mesh, Props>(
+  ({ posicion, color = "#00ff88", radius = 0.5 }, ref) => {
+    return (
+      <mesh ref={ref} position={posicion}>
+        <sphereGeometry args={[radius, 16, 16]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.5}
+        />
+      </mesh>
+    );
+  }
+);
+
+export default Particula;
+```
+
+## Props
+
+<ParamField path="posicion" type="[number, number, number]" required>
+  The particle's position in Three.js coordinate space (x, y, z)
+</ParamField>
+
+<ParamField path="color" type="string" default="#00ff88">
+  Hex color string for the particle. Applied to both base color and emissive color.
+</ParamField>
+
+<ParamField path="radius" type="number" default="0.5">
+  Radius of the particle sphere in scene units
+</ParamField>
+
+<ParamField path="ref" type="Ref<Mesh>">
+  Forwarded ref to the Three.js Mesh object, allowing direct manipulation by parent components
+</ParamField>
+
+## Geometry
+
+The particle uses a sphere geometry with:
+- **Radius**: Configurable via props
+- **Width segments**: 16 (horizontal resolution)
+- **Height segments**: 16 (vertical resolution)
+
+```typescript
+<sphereGeometry args={[radius, 16, 16]} />
+```
+
+These segment counts provide a good balance between visual quality and performance.
+
+## Material Properties
+
+The particle uses `meshStandardMaterial` with emissive properties:
+
+```typescript
+<meshStandardMaterial
+  color={color}
+  emissive={color}
+  emissiveIntensity={0.5}
+/>
+```
+
+<ParamField path="color" type="string">
+  Base color of the material
+</ParamField>
+
+<ParamField path="emissive" type="string">
+  Emissive color (self-illumination). Set to the same color as the base.
+</ParamField>
+
+<ParamField path="emissiveIntensity" type="number" default="0.5">
+  Intensity of the emissive color. Creates a glowing effect that makes particles visible even in dark scenes.
+</ParamField>
+
+## Ref Forwarding
+
+The component forwards refs using React's `forwardRef`:
+
+```typescript
+const Particula = forwardRef<Mesh, Props>(
+  ({ posicion, color = "#00ff88", radius = 0.5 }, ref) => {
+    return <mesh ref={ref} position={posicion}>...</mesh>;
+  }
+);
+```
+
+This allows parent components (like ParticleGroup) to:
+- Access the underlying Three.js Mesh
+- Directly update position via `mesh.position.set(x, y, z)`
+- Avoid unnecessary re-renders for performance
+
+## Usage Example
+
+```tsx
+import { useRef } from "react";
+import { Mesh } from "three";
+import Particula from "./Particula";
+
+function MyScene() {
+  const meshRef = useRef<Mesh>(null);
+
+  // Direct manipulation of the mesh
+  const updatePosition = (x: number, y: number, z: number) => {
+    if (meshRef.current) {
+      meshRef.current.position.set(x, y, z);
+    }
+  };
+
+  return (
+    <Particula
+      ref={meshRef}
+      posicion={[0, 10, 0]}
+      color="#ff0000"
+      radius={0.5}
+    />
+  );
+}
+```
+
+## Performance Considerations
+
+1. **Ref-based updates**: The component uses ref forwarding to allow direct mesh manipulation without triggering React re-renders
+
+2. **Static geometry**: The sphere geometry is created once and reused
+
+3. **Simple material**: Uses standard PBR material for good performance with realistic lighting
+
+4. **Moderate polygon count**: 16x16 segments provide smooth spheres without excessive geometry
+
+## Integration with Physics
+
+In the simulation, particles are rendered through the ParticleGroup component:
+
+```tsx
+// From ParticleGroup.tsx
+<Particula
+  ref={(el) => {
+    if (el) meshRefs.current[p.id] = el;
+  }}
+  posicion={[liveData.pos[1], liveData.pos[2], liveData.pos[0]]}
+  color={p.color}
+  radius={showParticles ? particleRadius : 0.001}
+/>
+```
+
+The physics system updates the mesh position directly via the ref:
+
+```typescript
+// From PhysicsUpdate.tsx
+if (meshRefs.current[p.id]) {
+  meshRefs.current[p.id].position.set(
+    posFinal[1],
+    posFinal[2],
+    posFinal[0]
+  );
+}
+```
+
+This approach bypasses React's render cycle for maximum performance during physics updates.
+
+## Visibility Control
+
+Particles can be made effectively invisible by setting a very small radius:
+
+```tsx
+<Particula
+  radius={showParticles ? particleRadius : 0.001}
+  // ...
+/>
+```
+
+This allows the trail and force visualizations to be displayed without the particle sphere itself.

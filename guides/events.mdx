@@ -1,0 +1,710 @@
+---
+title: 'Events System'
+description: 'Configure event-based behaviors and triggers in the simulator'
+icon: 'bolt'
+---
+
+## Overview
+
+The Event System allows particles to respond dynamically to physical conditions by triggering actions when specific criteria are met. Events are perfect for:
+
+- Pausing the simulation at critical moments (collisions, boundaries, etc.)
+- Changing particle appearance based on state
+- Creating complex conditional behaviors
+- Debugging and analyzing particle motion
+
+## Event Structure
+
+Each event consists of three main components:
+
+```typescript Movimiento.ts
+export interface ParticleEvent {
+  id: number;                    // Unique identifier
+  name: string;                  // Display name
+  conditions: EventCondition[];  // Array of conditions to check
+  conditionLogic: 'AND' | 'OR';  // How to combine conditions
+  actions: EventAction[];        // Actions to execute
+  triggered: boolean;            // Whether event has fired
+  enabled: boolean;              // Whether event is active
+}
+```
+
+## Event Conditions
+
+Conditions determine when an event should trigger.
+
+### Condition Structure
+
+```typescript EventCondition
+export interface EventCondition {
+  variable: 'x' | 'y' | 'z' | 't' | 'vx' | 'vy' | 'vz' | 'v';
+  operator: '==' | '>' | '<' | '>=' | '<=' | '!=';
+  value: number;
+}
+```
+
+### Available Variables
+
+You can create conditions based on these particle properties:
+
+| Variable | Description | Example Use Case |
+|----------|-------------|------------------|
+| `x` | Position on X-axis | Detect boundary crossing |
+| `y` | Position on Y-axis | Detect boundary crossing |
+| `z` | Position on Z-axis (height) | Detect ground collision |
+| `t` | Elapsed time | Time-based triggers |
+| `vx` | Velocity in X direction | Detect stopping/acceleration |
+| `vy` | Velocity in Y direction | Detect stopping/acceleration |
+| `vz` | Velocity in Z direction | Detect peak height (vz=0) |
+| `v` | Speed (magnitude of velocity) | Detect threshold speeds |
+
+<Info>
+The `v` variable is computed as: `v = sqrt(vx² + vy² + vz²)`
+</Info>
+
+### Comparison Operators
+
+| Operator | Meaning | Example Condition |
+|----------|---------|-------------------|
+| `==` | Equals (with tolerance) | `z == 0` (touching ground) |
+| `!=` | Not equals | `vz != 0` (still moving vertically) |
+| `>` | Greater than | `z > 10` (above 10 meters) |
+| `<` | Less than | `v < 0.1` (nearly stopped) |
+| `>=` | Greater than or equal | `t >= 5` (after 5 seconds) |
+| `<=` | Less than or equal | `z <= 0` (at or below ground) |
+
+<Note>
+The `==` operator uses a tolerance of 0.01 for floating-point comparison. Use `<=` or `>=` for more reliable boundary detection.
+</Note>
+
+### Tolerance Implementation
+
+```typescript PhysicsUpdate.tsx
+const evaluateCondition = (
+  cond: EventCondition,
+  pos: [number, number, number],
+  vel: [number, number, number],
+  t: number
+): boolean => {
+  let actualValue: number;
+  
+  switch (cond.variable) {
+    case 'x': actualValue = pos[0]; break;
+    case 'y': actualValue = pos[1]; break;
+    case 'z': actualValue = pos[2]; break;
+    case 't': actualValue = t; break;
+    case 'vx': actualValue = vel[0]; break;
+    case 'vy': actualValue = vel[1]; break;
+    case 'vz': actualValue = vel[2]; break;
+    case 'v': actualValue = Math.hypot(vel[0], vel[1], vel[2]); break;
+    default: return false;
+  }
+
+  const tolerance = 0.01;
+  
+  switch (cond.operator) {
+    case '==': return Math.abs(actualValue - cond.value) < tolerance;
+    case '!=': return Math.abs(actualValue - cond.value) >= tolerance;
+    case '>': return actualValue > cond.value;
+    case '<': return actualValue < cond.value;
+    case '>=': return actualValue >= cond.value;
+    case '<=': return actualValue <= cond.value;
+    default: return false;
+  }
+};
+```
+
+## Condition Logic
+
+When an event has multiple conditions, you can choose how they combine:
+
+### AND Logic
+
+**ALL conditions must be true** for the event to trigger.
+
+**Example: Detect particle stopped on ground**
+```text Conditions (AND)
+• z <= 0      (touching ground)
+• v < 0.1     (nearly stopped)
+```
+
+Both conditions must be satisfied simultaneously.
+
+### OR Logic
+
+**ANY condition being true** will trigger the event.
+
+**Example: Detect particle leaving bounded area**
+```text Conditions (OR)
+• x > 50      (too far in +X)
+• x < -50     (too far in -X)
+• y > 50      (too far in +Y)
+• y < -50     (too far in -Y)
+```
+
+The event triggers if any boundary is crossed.
+
+### Switching Logic Mode
+
+```typescript Condition Logic Selector
+<select 
+  value={event.conditionLogic}
+  onChange={(e) => updateEvent(event.id, { 
+    conditionLogic: e.target.value as 'AND' | 'OR' 
+  })}
+>
+  <option value="AND">AND</option>
+  <option value="OR">OR</option>
+</select>
+```
+
+<Tip>
+Use **AND** for precise composite conditions. Use **OR** for boundary detection and multiple trigger scenarios.
+</Tip>
+
+## Event Actions
+
+Actions define what happens when an event triggers.
+
+### Action Types
+
+```typescript EventAction
+export interface EventAction {
+  type: 'pause' | 'changeColor';
+  payload?: string;  // For changeColor: hex color code
+}
+```
+
+#### Pause Action
+
+Stops the simulation immediately:
+
+```typescript Pause Action
+{
+  type: 'pause'
+}
+```
+
+**Use cases:**
+- Stop at ground collision
+- Pause at maximum height
+- Stop when particle exits bounds
+- Debug specific states
+
+#### Change Color Action
+
+Changes the particle's color:
+
+```typescript Change Color Action
+{
+  type: 'changeColor',
+  payload: '#ff0000'  // New color in hex format
+}
+```
+
+**Use cases:**
+- Visual feedback for state changes
+- Indicate threshold crossings
+- Mark collision events
+- Show particle groups
+
+### Action Execution
+
+```typescript PhysicsUpdate.tsx
+// Execute actions when event triggers
+event.actions.forEach((action) => {
+  switch (action.type) {
+    case 'pause':
+      onPause();
+      break;
+    case 'changeColor':
+      if (action.payload) {
+        onUpdateParticle(p.id, { color: action.payload });
+      }
+      break;
+  }
+});
+```
+
+<Info>
+Multiple actions can be added to a single event. They execute sequentially when the event triggers.
+</Info>
+
+## Event Lifecycle
+
+### Event States
+
+1. **Enabled**: Event actively checks conditions every frame
+2. **Disabled**: Event exists but conditions are not evaluated
+3. **Triggered**: Event has fired and won't trigger again until reset
+
+### Trigger Prevention
+
+Events only trigger **once** per simulation run:
+
+```typescript Event Evaluation
+const evaluateEvent = (
+  event: ParticleEvent,
+  pos: [number, number, number],
+  vel: [number, number, number],
+  t: number
+): boolean => {
+  // Skip if disabled or already triggered
+  if (!event.enabled || event.triggered || event.conditions.length === 0) {
+    return false;
+  }
+
+  const results = event.conditions.map(cond => 
+    evaluateCondition(cond, pos, vel, t)
+  );
+
+  if (event.conditionLogic === 'AND') {
+    return results.every(r => r);
+  } else {
+    return results.some(r => r);
+  }
+};
+```
+
+### Resetting Events
+
+Events reset when you:
+- Click the **RESET** button
+- Edit the particle properties
+- Reload a configuration
+
+```typescript Escenario.tsx
+const handleReset = () => {
+  setParts((prev) =>
+    prev.map((p) => ({
+      ...p,
+      events: p.events?.map(e => ({ ...e, triggered: false })) || [],
+    }))
+  );
+};
+```
+
+## Creating Events
+
+### Adding a New Event
+
+1. Open the particle editor
+2. Scroll to the **Events** section
+3. Click **"+ ADD EVENT"**
+
+```typescript Add Event
+const addEvent = () => {
+  const newEvent: ParticleEvent = {
+    id: Date.now(),
+    name: `Event ${(sel.events?.length || 0) + 1}`,
+    conditions: [{ variable: 'z', operator: '<=', value: 0 }],
+    conditionLogic: 'AND',
+    actions: [{ type: 'pause' }],
+    triggered: false,
+    enabled: true,
+  };
+  onUpdatePart(sel.id, { events: [...(sel.events || []), newEvent] });
+};
+```
+
+Default event: Pause when particle touches ground (z ≤ 0)
+
+### Editing Event Name
+
+Click the event name field to edit:
+
+```typescript Event Name
+<input
+  type="text"
+  value={event.name}
+  onChange={(e) => updateEvent(event.id, { name: e.target.value })}
+/>
+```
+
+### Toggling Event State
+
+Click the **ON/OFF** button:
+- **Green (ON)**: Event is enabled
+- **Gray (OFF)**: Event is disabled
+
+## Managing Conditions
+
+### Adding Conditions
+
+Click **"+ Condition"** within an event:
+
+```typescript Add Condition
+const addCondition = (eventId: number) => {
+  const event = sel.events?.find(e => e.id === eventId);
+  if (!event) return;
+  
+  const newCondition: EventCondition = { 
+    variable: 'x', 
+    operator: '==', 
+    value: 0 
+  };
+  updateEvent(eventId, { 
+    conditions: [...event.conditions, newCondition] 
+  });
+};
+```
+
+### Editing Conditions
+
+Each condition has three dropdowns/inputs:
+
+```typescript Condition Editor
+<select value={cond.variable}>  {/* Variable selector */}
+  <option value="x">x</option>
+  <option value="y">y</option>
+  <option value="z">z</option>
+  <option value="t">t</option>
+  <option value="vx">vx</option>
+  <option value="vy">vy</option>
+  <option value="vz">vz</option>
+  <option value="v">v</option>
+</select>
+
+<select value={cond.operator}>  {/* Operator selector */}
+  <option value="==">==</option>
+  <option value=">">&gt;</option>
+  <option value="<">&lt;</option>
+  <option value=">=">&gt;=</option>
+  <option value="<=">&lt;=</option>
+  <option value="!=">!=</option>
+</select>
+
+<input type="number" value={cond.value} />  {/* Value input */}
+```
+
+### Removing Conditions
+
+Click the **"-"** button next to a condition to remove it.
+
+<Warning>
+An event with zero conditions will never trigger. Ensure at least one condition exists.
+</Warning>
+
+## Managing Actions
+
+### Adding Actions
+
+Click **"+ Action"** within an event:
+
+```typescript Add Action
+const addAction = (eventId: number) => {
+  const event = sel.events?.find(e => e.id === eventId);
+  if (!event) return;
+  
+  const newAction: EventAction = { type: 'pause' };
+  updateEvent(eventId, { 
+    actions: [...event.actions, newAction] 
+  });
+};
+```
+
+### Editing Actions
+
+**Select action type:**
+```typescript Action Type Selector
+<select value={action.type}>
+  <option value="pause">⏸ Pause</option>
+  <option value="changeColor">🎨 Color</option>
+</select>
+```
+
+**For changeColor, a color picker appears:**
+```typescript Color Picker for Action
+{action.type === 'changeColor' && (
+  <input
+    type="color"
+    value={action.payload || "#ff0000"}
+    onChange={(e) => updateAction(eventId, actionIndex, { 
+      payload: e.target.value 
+    })}
+  />
+)}
+```
+
+### Removing Actions
+
+Click the **"-"** button next to an action to remove it.
+
+## Real Examples
+
+### Example 1: Ground Collision Detection
+
+**Goal**: Pause simulation when projectile hits the ground
+
+```text Event Configuration
+Name: Ground Impact
+Enabled: ON
+
+Conditions (AND):
+• z <= 0
+
+Actions:
+• ⏸ Pause
+```
+
+<CodeGroup>
+
+```json Configuration Format
+{
+  "id": 1001,
+  "name": "Ground Impact",
+  "conditions": [
+    { "variable": "z", "operator": "<=", "value": 0 }
+  ],
+  "conditionLogic": "AND",
+  "actions": [
+    { "type": "pause" }
+  ],
+  "triggered": false,
+  "enabled": true
+}
+```
+
+</CodeGroup>
+
+### Example 2: Peak Height Detection
+
+**Goal**: Change color when projectile reaches maximum height (vz = 0)
+
+```text Event Configuration
+Name: Peak Height
+Enabled: ON
+
+Conditions (AND):
+• vz == 0
+• z > 1
+
+Actions:
+• 🎨 Color → #00ff00 (green)
+```
+
+The second condition (z > 1) prevents triggering at ground level.
+
+### Example 3: Speed Threshold Alert
+
+**Goal**: Turn red when particle exceeds speed limit
+
+```text Event Configuration
+Name: Speed Warning
+Enabled: ON
+
+Conditions (AND):
+• v > 20
+
+Actions:
+• 🎨 Color → #ff0000 (red)
+```
+
+### Example 4: Boundary Escape Detection
+
+**Goal**: Pause if particle leaves the bounded region
+
+```text Event Configuration
+Name: Out of Bounds
+Enabled: ON
+
+Conditions (OR):
+• x > 100
+• x < -100
+• y > 100
+• y < -100
+• z > 100
+
+Actions:
+• ⏸ Pause
+• 🎨 Color → #ff00ff (magenta)
+```
+
+### Example 5: Time-Based State Change
+
+**Goal**: Change color after 10 seconds
+
+```text Event Configuration
+Name: 10 Second Mark
+Enabled: ON
+
+Conditions (AND):
+• t >= 10
+
+Actions:
+• 🎨 Color → #ffff00 (yellow)
+```
+
+### Example 6: Stopped Particle Detection
+
+**Goal**: Detect when particle comes to rest
+
+```text Event Configuration
+Name: Particle Stopped
+Enabled: ON
+
+Conditions (AND):
+• v < 0.05
+• z <= 0.01
+
+Actions:
+• ⏸ Pause
+```
+
+## Event Visual Indicators
+
+The editor provides visual feedback for event states:
+
+### Background Colors
+
+- **Normal**: `rgba(255,255,255,0.05)` - Not triggered
+- **Triggered**: `rgba(40, 167, 69, 0.2)` - Green tint
+
+### Border Colors
+
+- **Enabled**: Yellow border `rgba(255,193,7,0.5)`
+- **Disabled**: Gray border `rgba(100,100,100,0.3)`
+
+### Status Badge
+
+```typescript Triggered Badge
+{event.triggered && (
+  <div style={{ fontSize: "10px", color: "#28a745" }}>
+    ✓ Triggered
+  </div>
+)}
+```
+
+## Best Practices
+
+<AccordionGroup>
+
+<Accordion title="Use meaningful event names">
+Name events descriptively:
+- ✅ "Ground Collision"
+- ✅ "Max Height Reached"
+- ❌ "Event 1"
+- ❌ "Test"
+</Accordion>
+
+<Accordion title="Account for floating-point precision">
+Use `<=` or `>=` instead of `==` for critical values:
+
+```text Better
+z <= 0  (ground detection)
+t >= 5  (time threshold)
+```
+
+```text Risky
+z == 0  (might miss due to precision)
+t == 5  (exact match unlikely)
+```
+</Accordion>
+
+<Accordion title="Combine actions for rich feedback">
+Multiple actions provide better visualization:
+
+```text Good Event
+Actions:
+• 🎨 Color → #ff0000
+• ⏸ Pause
+```
+
+This both marks the event visually AND stops for inspection.
+</Accordion>
+
+<Accordion title="Use OR logic for boundaries">
+When checking multiple boundaries, OR logic is more appropriate:
+
+```text Correct (OR)
+• x > 50
+• x < -50
+• y > 50
+• y < -50
+```
+
+Using AND would require all to be true simultaneously (impossible).
+</Accordion>
+
+<Accordion title="Disable events for testing">
+Disable events temporarily rather than deleting them:
+- Click ON/OFF button to toggle
+- Preserves event configuration
+- Easy to re-enable later
+</Accordion>
+
+</AccordionGroup>
+
+## Troubleshooting
+
+### Event Never Triggers
+
+**Check:**
+1. Is the event **enabled** (green ON button)?
+2. Are conditions physically possible?
+3. Is the tolerance too strict for `==` comparisons?
+4. For AND logic, can all conditions be true simultaneously?
+
+### Event Triggers Immediately
+
+**Possible causes:**
+1. Initial conditions already satisfy the event
+2. Check z &lt;= 0 with particles starting at ground level
+3. Verify time conditions (t &gt;= 0 always triggers immediately)
+
+### Event Triggers Multiple Times
+
+Events should only trigger once. If this happens:
+1. Check if the event was properly reset
+2. Verify the `triggered` flag is being set
+3. This is likely a bug - events are designed to fire once
+
+### Color Change Not Visible
+
+1. Ensure the action has a `payload` with a valid hex color
+2. Check if another event is overriding the color
+3. Verify the particle is visible (not off-screen)
+
+## Advanced Patterns
+
+### Chaining Events with Color States
+
+Use multiple events with color changes to track state progression:
+
+```text Event 1: Launch Phase
+Conditions: z > 0
+Actions: Color → #00ff00 (green)
+
+Event 2: Descent Phase  
+Conditions: vz < 0, z > 0
+Actions: Color → #ffff00 (yellow)
+
+Event 3: Landing
+Conditions: z <= 0
+Actions: Color → #ff0000 (red), Pause
+```
+
+### Composite Detection
+
+Combine position and velocity for precise detection:
+
+```text Event: Landing with High Speed
+Conditions (AND):
+• z <= 0.1      (near ground)
+• vz < -5       (fast downward velocity)
+
+Actions: 
+• Color → #ff0000 (impact warning)
+• Pause
+```
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Formula Syntax" icon="function" href="/guides/formula-syntax">
+    Understand variables used in conditions (x, y, z, vx, vy, vz, v, t)
+  </Card>
+  <Card title="Particle Editor" icon="pen-to-square" href="/guides/particle-editor">
+    Learn how to access and manage the events interface
+  </Card>
+</CardGroup>

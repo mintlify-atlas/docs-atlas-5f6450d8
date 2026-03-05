@@ -1,0 +1,395 @@
+---
+title: 'Particle Editor'
+description: 'Complete guide to using the particle editor interface'
+icon: 'pen-to-square'
+---
+
+## Opening the Particle Editor
+
+To edit a particle's properties, click on any particle in the **Particles** list in the GUI sidebar. The Particle Editor panel will open on the left side of the screen.
+
+<Tip>
+The simulation automatically pauses when you open the Particle Editor to prevent changes during motion.
+</Tip>
+
+## Editor Interface Overview
+
+The Particle Editor provides complete control over a particle's physical properties, forces, and events:
+
+```typescript ParticleEditor.tsx
+interface ParticleEditorProps {
+  sel: PData;              // Selected particle data
+  onUpdatePart: (id: number, data: any) => void;
+  onClose: () => void;
+}
+```
+
+## Calculation Modes
+
+The simulator supports two physics calculation modes:
+
+### Kinematics Mode
+
+Define position directly as functions of time `f(t)`.
+
+**Use when:**
+- You know the exact trajectory equation
+- Working with parametric paths
+- Educational demonstrations of motion types
+
+**Button appearance:** Green background with text **"MODE: KINEMATICS f(t)"**
+
+### Dynamics Mode
+
+Define forces `F(t, x, y, z)` and let the engine compute motion using Newton's laws.
+
+**Use when:**
+- Simulating realistic physics interactions
+- Working with force fields
+- Modeling particle interactions
+
+**Button appearance:** Red background with text **"MODE: DYNAMICS (FORCES)"**
+
+<Note>
+Click the mode button to toggle between kinematics and dynamics modes. The editor interface changes based on the selected mode.
+</Note>
+
+## Editing Initial Conditions
+
+### Initial Position
+
+Set the starting position in 3D space:
+
+```typescript Position Input
+<label>Initial Position (X, Y, Z)</label>
+<input type="number" value={sel.p0_fis[0]} /> // X coordinate
+<input type="number" value={sel.p0_fis[1]} /> // Y coordinate
+<input type="number" value={sel.p0_fis[2]} /> // Z coordinate
+```
+
+**Coordinate System:**
+- **X**: Forward/backward
+- **Y**: Left/right
+- **Z**: Up/down (Z=0 is the ground plane)
+
+### Initial Velocity
+
+Set the starting velocity vector:
+
+```typescript Velocity Input
+<label>Initial Velocity (v0)</label>
+<input type="number" value={sel.v0_fis[0]} /> // vx
+<input type="number" value={sel.v0_fis[1]} /> // vy
+<input type="number" value={sel.v0_fis[2]} /> // vz
+```
+
+<Info>
+Velocity is measured in meters per second (m/s). Positive Z velocity means upward motion.
+</Info>
+
+## Setting Mass (Dynamics Mode Only)
+
+When in dynamics mode, you can set the particle's mass:
+
+```typescript Mass Input
+<label>Mass (kg)</label>
+<input 
+  type="number" 
+  value={sel.mass}
+  onChange={(e) => onUpdatePart(sel.id, { mass: Number(e.target.value) })}
+/>
+```
+
+**Important considerations:**
+- Mass affects how forces accelerate the particle (F = ma)
+- Heavier particles accelerate more slowly under the same force
+- Default mass is 1 kg
+- Minimum practical mass is 0.001 kg (to avoid division issues)
+
+## Managing Forces (Dynamics Mode)
+
+### Adding Forces
+
+Click the **"+ ADD FORCE"** button to create a new force vector:
+
+```typescript Add Force
+const addForce = () => {
+  const newForce: Force = { id: Date.now(), vec: ["0", "0", "0"] };
+  onUpdatePart(sel.id, { forces: [...sel.forces, newForce] });
+};
+```
+
+Each force has three components:
+- **Fx**: Force in X direction (Newtons)
+- **Fy**: Force in Y direction (Newtons)
+- **Fz**: Force in Z direction (Newtons)
+
+### Editing Force Formulas
+
+Each force component accepts a mathematical formula:
+
+<CodeGroup>
+
+```text Constant Force
+Fx: 10
+Fy: 0
+Fz: -5
+```
+
+```text Time-Varying Force
+Fx: 5 * sin(t)
+Fy: 5 * cos(t)
+Fz: 10 * cos(t*0.5)
+```
+
+```text Position-Dependent Force (Spring)
+Fx: -2 * x
+Fy: -2 * y
+Fz: -2 * z
+```
+
+```text Combined Dependencies
+Fx: -x * abs(cos(t*0.2))
+Fy: -y * abs(cos(t*0.2))
+Fz: -z * 0.5 + 20 * tanh(sin(t))
+```
+
+</CodeGroup>
+
+### Force Vector Display
+
+```typescript Force Editor UI
+{sel.forces.map((f, i) => (
+  <div key={f.id}>
+    <input type="text" value={f.vec[0]} placeholder="Fx" />
+    <input type="text" value={f.vec[1]} placeholder="Fy" />
+    <input type="text" value={f.vec[2]} placeholder="Fz" />
+    <button onClick={() => deleteForce(f.id)}>X</button>
+  </div>
+))}
+```
+
+### Removing Forces
+
+Click the **"X"** button next to any force to remove it from the particle.
+
+<Warning>
+Removing all forces in dynamics mode means the particle will only be affected by gravity (if enabled) and initial velocity.
+</Warning>
+
+## Managing Multiple Forces
+
+The simulator supports multiple simultaneous forces on a single particle:
+
+- Forces are **additive** - all forces are summed to get the net force
+- Net force is calculated every frame: `F_net = F1 + F2 + F3 + ...`
+- Acceleration is computed using Newton's second law: `a = F_net / mass`
+
+**Example: Spring System with Damping**
+
+```text Force 1 (Restoring Spring Force)
+Fx: -10 * x
+Fy: -10 * y  
+Fz: -10 * z
+
+Force 2 (Damping Force)
+Fx: -0.5 * vx
+Fy: -0.5 * vy
+Fz: -0.5 * vz
+```
+
+<Tip>
+Use multiple forces to separate different physical effects (springs, damping, external fields) for easier tuning and understanding.
+</Tip>
+
+## Kinematics Mode Functions
+
+In kinematics mode, define position functions directly:
+
+```typescript Kinematics Input
+<label>Functions f(t)</label>
+<input placeholder="fx(t)" value={sel.fx} />
+<input placeholder="fy(t)" value={sel.fy} />
+<input placeholder="fz(t)" value={sel.fz} />
+```
+
+**Examples:**
+
+<CodeGroup>
+
+```text Circular Motion
+fx(t): 10 * cos(t)
+fy(t): 10 * sin(t)
+fz(t): 0
+```
+
+```text Helix
+fx(t): 5 * cos(t)
+fy(t): 5 * sin(t)
+fz(t): t * 2
+```
+
+```text Figure-8
+fx(t): 10 * sin(t)
+fy(t): 10 * sin(t) * cos(t)
+fz(t): 0
+```
+
+</CodeGroup>
+
+<Note>
+In kinematics mode, gravity still affects the particle. Set `fz(t)` to compensate: `fz(t): -0.5 * 9.81 * t^2` for free fall.
+</Note>
+
+## Setting Particle Color
+
+Customize the particle's visual appearance:
+
+```typescript Color Picker
+<label>Color</label>
+<input 
+  type="color" 
+  value={sel.color}
+  onChange={(e) => onUpdatePart(sel.id, { color: e.target.value })}
+/>
+```
+
+Colors are stored in hex format (e.g., `#ff00ff`). The color picker provides a visual interface for selection.
+
+<Tip>
+Use different colors to distinguish particle groups or track individual particles in complex simulations.
+</Tip>
+
+## Events Configuration
+
+The Events section allows you to trigger actions based on conditions. See the [Events Guide](/guides/events) for detailed information.
+
+### Quick Overview
+
+Events appear below the main editor with:
+- **Event name** (editable)
+- **ON/OFF toggle** (enable/disable)
+- **Conditions list** with AND/OR logic
+- **Actions list** (pause, changeColor)
+- **Delete button (X)**
+
+```typescript Event Display
+<label>Events ({sel.events?.length || 0})</label>
+<button onClick={addEvent}>+ ADD EVENT</button>
+```
+
+**Event Status Indicators:**
+- **Green background**: Event has been triggered
+- **Yellow border**: Event is enabled
+- **Gray border**: Event is disabled
+- **✓ Triggered**: Shows when event conditions are met
+
+## Closing the Editor
+
+Click the **"CLOSE"** button at the bottom of the editor to return to the main view:
+
+```typescript Close Button
+<button
+  onClick={onClose}
+  style={{ marginTop: 10, background: "#007bff", color: "white" }}
+>
+  CLOSE
+</button>
+```
+
+<Info>
+Changes are applied immediately. Click CLOSE or select another particle to exit the editor.
+</Info>
+
+## Particle List Interactions
+
+In the main GUI, the particle list offers additional interactions:
+
+### Click Actions
+
+- **Left Click**: Open particle editor
+- **Right Click**: Focus camera on particle
+- **Shift + Click**: Reset camera to default position
+
+### Particle Display
+
+```typescript Particle Item
+<div className="particle-item" style={{ color: part.color }}>
+  <span>
+    P-{part.id.toString().slice(-3)}
+    {part.enSuelo ? "(Ground)" : ""}
+  </span>
+  <button onClick={deleteParticle}>x</button>
+</div>
+```
+
+- **P-XXX**: Last 3 digits of particle ID
+- **(Ground)**: Appears when particle is touching ground (z=0)
+- **x button**: Delete the particle
+
+## Common Workflows
+
+<AccordionGroup>
+
+<Accordion title="Creating a projectile">
+1. Add a new particle at desired height
+2. Set initial velocity (e.g., vx=10, vy=0, vz=5)
+3. Switch to Dynamics mode
+4. Leave forces empty (gravity will act automatically)
+5. Enable gravity in Environment settings
+6. Click START
+</Accordion>
+
+<Accordion title="Creating a spring oscillator">
+1. Add particle at (10, 0, 0)
+2. Set initial velocity (0, 0, 0)
+3. Switch to Dynamics mode
+4. Set mass to 1 kg
+5. Add force: Fx=-10*x, Fy=-10*y, Fz=-10*z
+6. Disable gravity
+7. Click START
+</Accordion>
+
+<Accordion title="Creating a custom trajectory">
+1. Add particle at (0, 0, 0)
+2. Switch to Kinematics mode
+3. Set functions:
+   - fx(t): 10*cos(t)
+   - fy(t): 10*sin(t)
+   - fz(t): t*2
+4. Click START to see the helix motion
+</Accordion>
+
+<Accordion title="Adding collision detection">
+1. Open particle editor
+2. Scroll to Events section
+3. Click "+ ADD EVENT"
+4. Set condition: z &lt;= 0
+5. Add action: Pause
+6. The simulation will pause when particle hits ground
+</Accordion>
+
+</AccordionGroup>
+
+## Best Practices
+
+1. **Start Simple**: Begin with basic forces/functions and add complexity gradually
+2. **Use Descriptive Colors**: Color-code particles by behavior or group
+3. **Monitor Events**: Keep track of triggered events using the visual indicators
+4. **Test Incrementally**: After each change, run a short simulation to verify behavior
+5. **Save Configurations**: Use the SAVE button to preserve interesting setups
+
+<Warning>
+Editing a particle resets its time to t=0 and reinitializes position/velocity. Use PAUSE instead of editing if you want to inspect mid-simulation.
+</Warning>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Formula Syntax" icon="function" href="/guides/formula-syntax">
+    Learn the complete formula syntax for forces and functions
+  </Card>
+  <Card title="Events System" icon="bolt" href="/guides/events">
+    Configure advanced event-based behaviors
+  </Card>
+</CardGroup>

@@ -1,0 +1,628 @@
+---
+title: Visualization
+description: 3D rendering, particle trails, force vectors, and visualization features
+---
+
+Particle Simulator uses Three.js and React Three Fiber to provide rich 3D visualization of particle motion, forces, and the simulation environment.
+
+## 3D Rendering with Three.js
+
+The visualization is built on top of **Three.js**, a powerful 3D graphics library, integrated with React through **React Three Fiber** (R3F).
+
+### Scene Setup
+
+The main 3D scene is configured in `Escenario.tsx:252-301`:
+
+```typescript
+<Canvas camera={{ position: [50, 50, 50], far: 10000 }}>
+  <color attach="background" args={["#050505"]} />
+  <ambientLight intensity={0.5} />
+  <pointLight position={[15, 15, 15]} intensity={1.5} />
+
+  <SmoothCameraFocus
+    target={focusTarget}
+    resetTick={resetCamTick}
+    defaultCamPos={[50, 50, 50]}
+  />
+  
+  {showGrid && (
+    <primitive
+      object={new GridHelper(2000, 100, 0x444444, 0x222222)}
+      position={[0, 0, 0]}
+    />
+  )}
+
+  {showAxes && <Axes />}
+
+  <PhysicsUpdate ... />
+
+  {parts.map((p) => (
+    <ParticleGroup ... />
+  ))}
+  
+  <OrbitControls makeDefault />
+</Canvas>
+```
+
+Key components:
+- **Canvas**: R3F wrapper for Three.js scene
+- **Camera**: Positioned at `[50, 50, 50]` with far clipping plane at 10000 units
+- **Background**: Dark color `#050505` for contrast
+- **Lighting**: Ambient light (0.5) + point light (1.5) for depth
+- **OrbitControls**: Mouse-based camera control
+
+<Info>
+The camera's initial position `[50, 50, 50]` provides an isometric-like view of the scene, making it easy to see all three dimensions simultaneously.
+</Info>
+
+## Particle Visualization
+
+### Particle Rendering
+
+Particles are rendered as 3D spheres with emissive materials:
+
+```typescript
+// From Particula.tsx:10-23
+const Particula = forwardRef<Mesh, Props>(
+  ({ posicion, color = "#00ff88", radius = 0.5 }, ref) => {
+    return (
+      <mesh ref={ref} position={posicion}>
+        <sphereGeometry args={[radius, 16, 16]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.5}
+        />
+      </mesh>
+    );
+  }
+);
+```
+
+Visualization features:
+- **Sphere geometry**: `radius` controls size, `16x16` segments for smoothness
+- **Standard material**: Responds to scene lighting
+- **Emissive glow**: Self-illuminating with 50% intensity
+- **Custom color**: Each particle can have a unique color
+
+<Tip>
+The emissive property makes particles visible even in dark areas, creating a glowing effect that stands out against the dark background.
+</Tip>
+
+### Particle Visibility Toggle
+
+Particles can be hidden by setting their radius to near-zero:
+
+```typescript
+// From ParticleGroup.tsx:57-64
+<Particula
+  ref={(el) => {
+    if (el) meshRefs.current[p.id] = el;
+  }}
+  posicion={[liveData.pos[1], liveData.pos[2], liveData.pos[0]]}
+  color={p.color}
+  radius={showParticles ? particleRadius : 0.001}  // Hide when showParticles=false
+/>
+```
+
+This allows you to visualize only the trails without the particle spheres cluttering the view.
+
+### Coordinate System Mapping
+
+Physics coordinates `[x, y, z]` are mapped to Three.js coordinates:
+
+```typescript
+// Physics: [x, y, z]
+// Three.js: [y, z, x]
+posicion={[liveData.pos[1], liveData.pos[2], liveData.pos[0]]}
+```
+
+This mapping is necessary because the physics engine and Three.js use different coordinate conventions.
+
+## Particle Trails
+
+### Trail System
+
+Particle trails show the path a particle has taken through space:
+
+```typescript
+// From ParticleGroup.tsx:66-74
+{path && liveData.trail.length > 1 && (
+  <Line
+    points={liveData.trail}
+    color={p.color}
+    lineWidth={1.5}
+    transparent
+    opacity={0.6}
+  />
+)}
+```
+
+Trail properties:
+- **Color**: Matches the particle's color
+- **Width**: 1.5 pixels
+- **Opacity**: 60% transparency for subtle effect
+- **Points**: Array of 3D positions
+
+### Trail Sampling
+
+Trails are sampled periodically to balance detail with performance:
+
+```typescript
+// From PhysicsUpdate.tsx:326-331
+if (live.frameCount % 5 === 0) {
+  live.trail = [
+    ...live.trail,
+    [posFinal[1], posFinal[2], posFinal[0]] as [number, number, number],
+  ].slice(-200) as [number, number, number][];
+}
+```
+
+Trail management:
+- **Sampling rate**: Every 5 frames (reduces point count)
+- **Max points**: 200 most recent points (prevents memory issues)
+- **Coordinate mapping**: Physics `[x,y,z]` → Three.js `[y,z,x]`
+
+<Info>
+With a typical frame rate of 60 FPS and sampling every 5 frames, you get 12 trail points per second. At 200 points max, trails show approximately 16-17 seconds of history.
+</Info>
+
+### Trail Toggle
+
+Trails can be toggled on/off without affecting the simulation:
+
+```typescript
+const [path, setPath] = useState(true);  // Global trail toggle
+
+// In render:
+{path && liveData.trail.length > 1 && (
+  <Line points={liveData.trail} ... />
+)}
+```
+
+<Tip>
+Disabling trails can improve performance when simulating many particles, as it skips rendering potentially thousands of line segments.
+</Tip>
+
+## Force Visualization
+
+Forces are visualized as colored arrows showing direction and magnitude.
+
+### Force Display Modes
+
+```typescript
+export type ForceDisplayMode = 0 | 1 | 2;
+
+// 0 = no forces shown
+// 1 = resultant force only (yellow arrow)
+// 2 = individual forces (colored arrows)
+```
+
+### Force Colors
+
+```typescript
+// From ForceVisualizer.tsx:24-30
+const COLORS = {
+  resultant: 0xffff00,  // Yellow - net force
+  gravity: 0x00ff00,    // Green - gravitational force
+  friction: 0xff00ff,   // Magenta - friction force
+  applied: 0x00ffff,    // Cyan - user-defined forces
+};
+```
+
+<Info>
+The color scheme is designed for maximum contrast against the dark background and differentiation between force types.
+</Info>
+
+### Resultant Force (Mode 1)
+
+Displays a single yellow arrow representing the net force:
+
+```typescript
+// From ForceVisualizer.tsx:109-128
+const resultant = {
+  fx: appliedForces.reduce((sum, f) => sum + f.fx, 0) + gravityForce.fx + frictionForce.fx,
+  fy: appliedForces.reduce((sum, f) => sum + f.fy, 0) + gravityForce.fy + frictionForce.fy,
+  fz: appliedForces.reduce((sum, f) => sum + f.fz, 0) + gravityForce.fz + frictionForce.fz,
+};
+
+const mag = Math.sqrt(resultant.fx ** 2 + resultant.fy ** 2 + resultant.fz ** 2);
+if (mag < 0.01) return null;  // Don't show tiny forces
+
+const arrowLen = getArrowLength(mag);
+const dir = new Vector3(resultant.fy, resultant.fz, resultant.fx).normalize();
+
+return (
+  <primitive
+    object={new ArrowHelper(dir, origin.clone(), arrowLen, COLORS.resultant, arrowLen * 0.25, arrowLen * 0.15)}
+  />
+);
+```
+
+The resultant force arrow:
+- **Direction**: Points in the direction of net acceleration
+- **Length**: Proportional to force magnitude (scaled and capped)
+- **Color**: Yellow for visibility
+- **Hidden**: When magnitude < 0.01 N
+
+### Individual Forces (Mode 2)
+
+Displays separate arrows for each force component:
+
+```typescript
+// From ForceVisualizer.tsx:131-174
+const arrows: ReactElement[] = [];
+
+// Applied forces (cyan)
+appliedForces.forEach((f, idx) => {
+  const mag = Math.sqrt(f.fx ** 2 + f.fy ** 2 + f.fz ** 2);
+  if (mag >= 0.01) {
+    const arrowLen = getArrowLength(mag);
+    const dir = new Vector3(f.fy, f.fz, f.fx).normalize();
+    arrows.push(
+      <primitive
+        key={`applied-${f.id || idx}`}
+        object={new ArrowHelper(dir, origin.clone(), arrowLen, COLORS.applied, arrowLen * 0.25, arrowLen * 0.15)}
+      />
+    );
+  }
+});
+
+// Gravity force (green)
+const gravMag = Math.sqrt(gravityForce.fx ** 2 + gravityForce.fy ** 2 + gravityForce.fz ** 2);
+if (gravMag >= 0.01) {
+  const arrowLen = getArrowLength(gravMag);
+  const gravDir = new Vector3(gravityForce.fy, gravityForce.fz, gravityForce.fx).normalize();
+  arrows.push(
+    <primitive
+      key="gravity"
+      object={new ArrowHelper(gravDir, origin.clone(), arrowLen, COLORS.gravity, arrowLen * 0.25, arrowLen * 0.15)}
+    />
+  );
+}
+
+// Friction force (magenta)
+const fricMag = Math.sqrt(frictionForce.fx ** 2 + frictionForce.fy ** 2 + frictionForce.fz ** 2);
+if (fricMag >= 0.01) {
+  const arrowLen = getArrowLength(fricMag);
+  const fricDir = new Vector3(frictionForce.fy, frictionForce.fz, frictionForce.fx).normalize();
+  arrows.push(
+    <primitive
+      key="friction"
+      object={new ArrowHelper(fricDir, origin.clone(), arrowLen, COLORS.friction, arrowLen * 0.25, arrowLen * 0.15)}
+    />
+  );
+}
+
+return <group>{arrows}</group>;
+```
+
+Individual force visualization allows you to:
+- See how different forces combine
+- Understand which force dominates at each moment
+- Debug force configurations
+- Learn physics concepts visually
+
+### Arrow Scaling
+
+Arrow lengths are scaled to fit the view:
+
+```typescript
+// From ForceVisualizer.tsx:32-39
+const MAX_ARROW_LENGTH = 2;
+const SCALE_FACTOR = 0.1;
+
+const getArrowLength = (mag: number): number => {
+  return Math.min(mag * SCALE_FACTOR, MAX_ARROW_LENGTH);
+};
+```
+
+- **Scale factor**: 0.1 (10N force → 1 unit arrow)
+- **Max length**: 2 units (prevents extremely long arrows)
+- **Proportional**: Longer arrows = stronger forces
+
+<Note>
+Arrow heads and cones are scaled proportionally to the arrow length (25% and 15% respectively), ensuring they remain visible and properly sized.
+</Note>
+
+### Force Calculation for Visualization
+
+Forces are calculated at the particle's current position:
+
+```typescript
+// From ForceVisualizer.tsx:57-62
+const appliedForces = p.forces.map((f: Force) => {
+  const fx = evaluarFormula(f.vec[0], liveData.t, liveData.pos[0], liveData.pos[1], liveData.pos[2]);
+  const fy = evaluarFormula(f.vec[1], liveData.t, liveData.pos[0], liveData.pos[1], liveData.pos[2]);
+  const fz = evaluarFormula(f.vec[2], liveData.t, liveData.pos[0], liveData.pos[1], liveData.pos[2]);
+  return { id: f.id, fx, fy, fz };
+});
+```
+
+This ensures that position-dependent forces (like springs) show the correct direction and magnitude at each moment.
+
+## Axes and Grid
+
+### Coordinate Axes
+
+Optional colored axes help orient the 3D space:
+
+```typescript
+// From Axes.tsx:5-39
+const AXIS_LENGTH = 10000;
+
+const Axes: React.FC = () => {
+  return (
+    <group>
+      {/* X Axis - Red */}
+      <Line
+        points={[[-AXIS_LENGTH, 0, 0], [AXIS_LENGTH, 0, 0]]}
+        color="red"
+        lineWidth={1}
+      />
+
+      {/* Y Axis - Green */}
+      <Line
+        points={[[0, -AXIS_LENGTH, 0], [0, AXIS_LENGTH, 0]]}
+        color="green"
+        lineWidth={1}
+      />
+
+      {/* Z Axis - Blue */}
+      <Line
+        points={[[0, 0, -AXIS_LENGTH], [0, 0, AXIS_LENGTH]]}
+        color="blue"
+        lineWidth={1}
+      />
+    </group>
+  );
+};
+```
+
+Axis colors:
+- **Red**: X-axis (horizontal)
+- **Green**: Y-axis (horizontal, perpendicular to X)
+- **Blue**: Z-axis (vertical)
+
+<Tip>
+The axes extend 10,000 units in each direction, far beyond typical simulation scales, ensuring they're always visible as reference lines.
+</Tip>
+
+### Ground Grid
+
+A grid helper shows the ground plane (z = 0):
+
+```typescript
+{showGrid && (
+  <primitive
+    object={new GridHelper(2000, 100, 0x444444, 0x222222)}
+    position={[0, 0, 0]}
+  />
+)}
+```
+
+Grid properties:
+- **Size**: 2000 units (1000 in each direction)
+- **Divisions**: 100 cells (each cell is 20 units)
+- **Center lines**: Color `0x444444` (medium gray)
+- **Grid lines**: Color `0x222222` (dark gray)
+- **Position**: Origin `[0, 0, 0]`
+
+<Info>
+The ground plane is important for understanding collisions and friction, as particles interact with the surface at z = 0.
+</Info>
+
+## Camera Controls
+
+### OrbitControls
+
+Mouse-based camera control using drei's `OrbitControls`:
+
+```typescript
+<OrbitControls makeDefault />
+```
+
+Controls:
+- **Left mouse drag**: Rotate around the scene
+- **Right mouse drag**: Pan the camera
+- **Scroll wheel**: Zoom in/out
+- **makeDefault**: Sets as primary control scheme
+
+### Smooth Camera Focus
+
+The camera can smoothly focus on specific particles:
+
+```typescript
+<SmoothCameraFocus
+  target={focusTarget}
+  resetTick={resetCamTick}
+  defaultCamPos={[50, 50, 50]}
+/>
+```
+
+Features:
+- **Smooth transitions**: Camera moves smoothly to focus on a particle
+- **Reset**: Returns to default position when reset
+- **Focus target**: Set by clicking a particle in the GUI
+
+<Tip>
+Use camera focus to track fast-moving particles or zoom into specific areas of interest during simulation.
+</Tip>
+
+## Info Panel
+
+A side panel can display real-time particle information:
+
+```typescript
+<ParticleInfo
+  p={p}
+  liveData={liveData}
+  showInfo={showInfo}
+  gravity={gravity}
+  friction={friction}
+/>
+```
+
+Displayed information:
+- Position `(x, y, z)`
+- Velocity `(vx, vy, vz)`
+- Speed `|v|`
+- Acceleration components
+- Force magnitudes
+- Mass and simulation mode
+- Current time
+
+<Note>
+The 3D info labels have been replaced by a GUI panel (InfoPanel.tsx) to reduce visual clutter in the 3D scene. See `ParticleInfo.tsx:19-24`.
+</Note>
+
+## Lighting
+
+The scene uses two light sources:
+
+### Ambient Light
+
+```typescript
+<ambientLight intensity={0.5} />
+```
+
+- Provides uniform illumination from all directions
+- Intensity 0.5 ensures everything is visible
+- No shadows or directional effects
+
+### Point Light
+
+```typescript
+<pointLight position={[15, 15, 15]} intensity={1.5} />
+```
+
+- Positioned at `[15, 15, 15]` (above and to the side)
+- Creates depth through shadows and highlights
+- Intensity 1.5 for stronger directional lighting
+- Makes 3D shapes more apparent
+
+<Info>
+The combination of ambient and point lighting ensures particles are always visible while still showing 3D depth and form.
+</Info>
+
+## Performance Optimizations
+
+### Frame-Based Updates
+
+The scene uses `useFrame` from R3F for efficient rendering:
+
+```typescript
+// From ParticleGroup.tsx:48-50
+useFrame(() => {
+  setTick((t) => t + 1);  // Force re-render every frame
+});
+```
+
+This ensures smooth animation synchronized with the display refresh rate.
+
+### Trail Limitations
+
+```typescript
+.slice(-200)  // Keep only last 200 points
+```
+
+Limiting trail points:
+- Prevents memory growth in long simulations
+- Reduces rendering overhead
+- Maintains visual quality (200 points is sufficient)
+
+### Conditional Rendering
+
+Components are only rendered when needed:
+
+```typescript
+{showGrid && <GridHelper ... />}
+{showAxes && <Axes />}
+{path && liveData.trail.length > 1 && <Line ... />}
+{forceMode !== 0 && <ForceVisualizer ... />}
+```
+
+This reduces the number of objects Three.js needs to render.
+
+### Force Magnitude Filtering
+
+```typescript
+if (mag < 0.01) return null;  // Don't render tiny forces
+```
+
+Skipping negligible forces reduces arrow count and improves readability.
+
+## Visual Effects
+
+### Particle Glow
+
+Particles have an emissive glow:
+
+```typescript
+emissive={color}
+emissiveIntensity={0.5}
+```
+
+This creates a soft glow effect that:
+- Makes particles stand out
+- Works well against dark backgrounds
+- Adds visual appeal
+
+### Trail Transparency
+
+```typescript
+transparent
+opacity={0.6}
+```
+
+Semi-transparent trails:
+- Reduce visual clutter
+- Allow seeing overlapping paths
+- Create a "ghost" effect
+
+### Dark Background
+
+```typescript
+<color attach="background" args={["#050505"]} />
+```
+
+Very dark (almost black) background:
+- High contrast with bright particle colors
+- Makes emissive effects stand out
+- Reduces eye strain during long sessions
+- Professional, modern appearance
+
+## Example: Complete Visualization Setup
+
+```typescript
+<Canvas camera={{ position: [50, 50, 50], far: 10000 }}>
+  {/* Dark background */}
+  <color attach="background" args={["#050505"]} />
+  
+  {/* Lighting */}
+  <ambientLight intensity={0.5} />
+  <pointLight position={[15, 15, 15]} intensity={1.5} />
+
+  {/* Camera controls */}
+  <OrbitControls makeDefault />
+  <SmoothCameraFocus target={focusTarget} resetTick={resetCamTick} defaultCamPos={[50, 50, 50]} />
+  
+  {/* Scene helpers */}
+  {showGrid && <primitive object={new GridHelper(2000, 100, 0x444444, 0x222222)} position={[0, 0, 0]} />}
+  {showAxes && <Axes />}
+
+  {/* Physics simulation */}
+  <PhysicsUpdate parts={parts} physicsRefs={physicsRefs} meshRefs={meshRefs} run={run} dT={dT} grav={grav} friction={friction} onPause={() => setRun(false)} onUpdateParticle={updateParticleFromEvent} onEventTriggered={handleEventTriggered} />
+
+  {/* Particles */}
+  {parts.map((p) => (
+    <ParticleGroup key={p.id} p={p} path={path} physicsRefs={physicsRefs} meshRefs={meshRefs} run={run} forceMode={forceMode} gravity={grav} friction={friction} showInfo={showInfo} showParticles={showParticles} particleRadius={particleRadius} />
+  ))}
+</Canvas>
+```
+
+## Related Topics
+
+- [Particles](/concepts/particles) - Understanding particle properties and structure
+- [Forces](/concepts/forces) - How forces are calculated and displayed
+- [Simulation Modes](/concepts/simulation-modes) - Different physics calculation modes

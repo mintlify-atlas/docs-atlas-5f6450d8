@@ -1,97 +1,95 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Particle Simulator"
+description: "A real-time particle simulation and visualization engine built with React and Three.js"
 ---
 
-## Setting up
+<div className="bg-gradient-to-br from-[#264a4d] via-[#161822] to-[#264a4d] rounded-xl p-12 text-center mb-8">
+  <h1 className="text-5xl font-bold text-white mb-4">Particle Simulator</h1>
+  <p className="text-xl text-[#cbd2e1] mb-8">
+    Visualize complex particle trajectories through dynamic mathematical formulas
+  </p>
+  <div className="flex gap-4 justify-center">
+    <a 
+      href="/quickstart" 
+      className="inline-block px-6 py-3 bg-[#eb4846] text-white font-semibold rounded-lg hover:bg-[#ff6b6b] transition"
+    >
+      Get Started
+    </a>
+    <a 
+      href="https://particle-simulator-psy.netlify.app/" 
+      target="_blank"
+      className="inline-block px-6 py-3 bg-[#ece0bc] text-[#264a4d] font-semibold rounded-lg hover:bg-white transition"
+    >
+      Live Demo
+    </a>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+## What is Particle Simulator?
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+Particle Simulator is a real-time physics simulation and visualization engine that lets you define particle motion through custom mathematical formulas. Built with React and Three.js, it provides an interactive 3D environment for exploring complex force equations and particle dynamics.
 
-## Make it yours
+Whether you're studying physics, prototyping simulations, or just exploring beautiful mathematical patterns, Particle Simulator makes it easy to visualize particles in motion.
 
-Design a docs site that looks great and empowers your users.
+## Key Features
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Mathematical Formula Engine" icon="function" href="/guides/formula-syntax">
+    Define forces using dynamic mathematical expressions with trigonometry, hyperbolic functions, and custom operators
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Dual Simulation Modes" icon="atom" href="/concepts/simulation-modes">
+    Choose between kinematic mode for pure trajectories or dynamic mode for mass-based physics
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="3D Visualization" icon="cube" href="/concepts/visualization">
+    Real-time 3D rendering with particle trails, force vectors, axes, and interactive camera controls
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Event System" icon="bolt" href="/guides/events">
+    Create conditional triggers that pause simulation or change particle properties when conditions are met
   </Card>
-</Columns>
+  <Card title="Physics Accuracy" icon="calculator" href="/physics/velocity-verlet">
+    Velocity Verlet integration ensures accurate particle motion even with complex force fields
+  </Card>
+  <Card title="Configuration Management" icon="floppy-disk" href="/guides/configuration">
+    Save and load complete simulation setups including all particles, forces, and environment settings
+  </Card>
+</CardGroup>
 
-## Create beautiful pages
+## Quick Example
 
-Everything you need to create world-class documentation.
+Define a particle affected by a Lissajous resonance pattern:
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+```typescript
+// Position
+x₀ = 10, y₀ = 0, z₀ = 0
 
-## Need inspiration?
+// Forces
+Fx = -x
+Fy = -2.25 * y
+Fz = sin(t * 0.5) * 5
+```
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+Watch as the particle creates beautiful 3D patterns in real-time.
+
+## Getting Started
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get up and running in minutes with your first particle simulation
+  </Card>
+  <Card title="Formula Syntax" icon="code" href="/guides/formula-syntax">
+    Learn the mathematical functions and operators available for defining forces
+  </Card>
+  <Card title="Physics Guide" icon="book-open" href="/physics/kinematics-vs-dynamics">
+    Understand the physics principles behind the simulation engine
+  </Card>
+  <Card title="Examples" icon="flask" href="/physics/trajectory-examples">
+    Explore pre-built examples of complex particle trajectories
+  </Card>
+</CardGroup>
+
+## Use Cases
+
+- **Physics Education**: Visualize force fields, trajectories, and particle interactions in real-time
+- **Simulation Prototyping**: Test and validate physics equations before implementing in production
+- **Mathematical Art**: Create beautiful patterns through parametric equations and force dynamics
+- **Research**: Explore complex multi-particle systems with customizable physics parameters

@@ -1,0 +1,314 @@
+---
+title: 'Formula Syntax'
+description: 'Complete guide to writing mathematical formulas in the Particle Simulator'
+icon: 'function'
+---
+
+## Overview
+
+The Particle Simulator uses a powerful formula evaluation engine that supports mathematical expressions with variables, functions, and constants. Formulas can be used to define forces in dynamics mode or position functions in kinematics mode.
+
+## Available Variables
+
+Your formulas have access to four key variables that represent the particle's state:
+
+| Variable | Description | Type |
+|----------|-------------|------|
+| `t` | Elapsed time in seconds | Number |
+| `x` | Current X-axis position of the particle | Number |
+| `y` | Current Y-axis position of the particle | Number |
+| `z` | Current Z-axis position of the particle | Number |
+
+<Note>
+In **Kinematics mode**, formulas represent position components as functions of time: `f(t)`.
+
+In **Dynamics mode**, formulas represent force components that can depend on time, position, or both: `F(t, x, y, z)`.
+</Note>
+
+## Mathematical Functions
+
+All functions from JavaScript's `Math` object are available in your formulas:
+
+### Trigonometric Functions
+
+| Function | Description | Example |
+|----------|-------------|----------|
+| `sin(n)` | Sine of n (radians) | `10 * sin(t)` |
+| `cos(n)` | Cosine of n (radians) | `5 * cos(2*t)` |
+| `tan(n)` | Tangent of n (radians) | `tan(t/3)` |
+| `atan2(y, x)` | Arctangent of y/x (in radians) | `atan2(y, x)` |
+
+### Hyperbolic Functions
+
+| Function | Description | Example |
+|----------|-------------|----------|
+| `sinh(n)` | Hyperbolic sine | `sinh(t)` |
+| `cosh(n)` | Hyperbolic cosine | `cosh(t)` |
+| `tanh(n)` | Hyperbolic tangent | `20 * tanh(sin(t))` |
+
+### Power and Logarithmic Functions
+
+| Function | Description | Example |
+|----------|-------------|----------|
+| `sqrt(n)` | Square root | `sqrt(x^2 + y^2 + z^2)` |
+| `log(n)` | Natural logarithm (base e) | `log(t + 1)` |
+| `log10(n)` | Base-10 logarithm | `log10(abs(x))` |
+
+### Utility Functions
+
+| Function | Description | Example |
+|----------|-------------|----------|
+| `abs(n)` | Absolute value | `abs(x)` |
+| `floor(n)` | Round down to nearest integer | `floor(t)` |
+| `ceil(n)` | Round up to nearest integer | `ceil(t)` |
+| `round(n)` | Round to nearest integer | `round(t)` |
+| `sign(n)` | Sign of number (-1, 0, or 1) | `sign(x)` |
+
+### Advanced Functions
+
+| Function | Description | Example |
+|----------|-------------|----------|
+| `min(a, b)` | Minimum of two values | `min(x, y)` |
+| `max(a, b)` | Maximum of two values | `max(x, 0)` |
+| `random()` | Random number between 0 and 1 | `random() * 10` |
+
+## Mathematical Constants
+
+These mathematical constants are available directly in your formulas:
+
+| Constant | Description | Value (Approx) |
+|----------|-------------|----------------|
+| `PI` | Ratio of circle circumference to diameter | 3.14159 |
+| `E` | Base of natural logarithms (Euler's number) | 2.71828 |
+| `SQRT2` | Square root of 2 | 1.41421 |
+
+## Operators
+
+Supported mathematical operators:
+
+| Operator | Description | Example |
+|----------|-------------|----------|
+| `+` | Addition | `x + 5` |
+| `-` | Subtraction | `10 - t` |
+| `*` | Multiplication | `2 * x` |
+| `/` | Division | `x / 2` |
+| `^` or `**` | Exponentiation | `x^2` or `x**2` |
+
+<Tip>
+Both `^` and `**` work for exponentiation. The engine automatically converts `^` to `**` internally.
+</Tip>
+
+## Formula Caching Mechanism
+
+The simulator implements an advanced caching system for optimal performance:
+
+```typescript Movimiento.ts
+const formulaCache: Record<string, Function> = {};
+
+export const evaluarFormula = (
+  formula: string,
+  t: number,
+  x: number = 0,
+  y: number = 0,
+  z: number = 0
+): number => {
+  try {
+    if (!formula || formula.trim() === "" || formula === "0") return 0;
+
+    const cacheKey = formula.toLowerCase().trim();
+    let fn = formulaCache[cacheKey];
+
+    if (!fn) {
+      // Replace ^ with ** for exponentiation
+      const cleanedFormula = cacheKey.replace(/\^/g, "**");
+      
+      // Create function injecting t, x, y, z AND all Math functions
+      fn = new Function(
+        "t", "x", "y", "z", ...mathKeys,
+        `return (function() { 
+          try { 
+            return ${cleanedFormula}; 
+          } catch(e) { return 0; } 
+        })()`
+      );
+      formulaCache[cacheKey] = fn;
+    }
+
+    // Execute with variables and Math values
+    const resultado = fn(t, x, y, z, ...mathValues);
+
+    return typeof resultado === "number" && !isNaN(resultado) ? resultado : 0;
+  } catch (e) {
+    return 0;
+  }
+};
+```
+
+### How It Works
+
+1. **First Evaluation**: When a formula is first encountered, it's converted to a JavaScript function and cached
+2. **Function Injection**: All `Math` object functions and constants are automatically injected into the formula scope
+3. **Subsequent Evaluations**: Cached functions are reused, avoiding expensive re-parsing
+4. **Case Insensitive**: Formulas are normalized to lowercase for cache lookup
+5. **Error Handling**: Invalid formulas return 0 instead of throwing errors
+
+<Note>
+This caching mechanism allows the simulator to maintain high performance even with 100+ particles running complex formulas in real-time.
+</Note>
+
+## Examples of Valid Formulas
+
+### Kinematics Mode Examples
+
+In kinematics mode, define position as a function of time:
+
+<CodeGroup>
+
+```text Simple Harmonic Motion
+fx(t): 10 * sin(t)
+fy(t): 0
+fz(t): 10 * cos(t)
+```
+
+```text Parabolic Trajectory
+fx(t): 0
+fy(t): 0
+fz(t): -0.5 * 9.81 * t^2
+```
+
+```text Lissajous Curve
+fx(t): 10 * sin(t)
+fy(t): 10 * sin(2*t)
+fz(t): 10 * cos(3*t)
+```
+
+```text Spiral
+fx(t): t * cos(t)
+fy(t): t * sin(t)
+fz(t): t * 0.5
+```
+
+</CodeGroup>
+
+### Dynamics Mode Examples
+
+In dynamics mode, define forces that can depend on position and time:
+
+<CodeGroup>
+
+```text Spring Force (Hooke's Law)
+Fx: -10 * x
+Fy: -10 * y
+Fz: -10 * z
+```
+
+```text Lissajous Resonance
+Fx: -x
+Fy: -2.25 * y
+Fz: sin(t * 0.5) * 5
+```
+
+```text Hyperbolic Damping
+Fx: 0
+Fy: 0
+Fz: -z * 0.5 + 20 * tanh(sin(t))
+```
+
+```text Pulsing Vortex
+Fx: -x * abs(cos(t*0.2))
+Fy: -y * abs(cos(t*0.2))
+Fz: -z * 0.5 + 20 * tanh(sin(t + 0.31))
+```
+
+```text Inverse-Square Gravity
+Fx: -x / (sqrt(x^2 + y^2 + z^2)^3)
+Fy: -y / (sqrt(x^2 + y^2 + z^2)^3)
+Fz: -z / (sqrt(x^2 + y^2 + z^2)^3)
+```
+
+```text Damped Oscillator
+Fx: -5*x - 0.1*vx
+Fy: -5*y - 0.1*vy
+Fz: 0
+```
+
+</CodeGroup>
+
+<Warning>
+Be careful with division by zero! Use safeguards like `sqrt(x^2 + y^2 + z^2 + 0.001)` to avoid singularities.
+</Warning>
+
+## Best Practices
+
+### Performance Tips
+
+1. **Keep formulas simple**: Complex nested functions may impact performance with many particles
+2. **Avoid random()**: Using `random()` in force formulas prevents caching benefits
+3. **Reuse similar formulas**: The cache works best when multiple particles use identical formulas
+
+### Common Pitfalls
+
+<AccordionGroup>
+
+<Accordion title="Division by zero errors">
+Always add a small epsilon when dividing by position-dependent values:
+
+```text Bad
+Fx: -x / sqrt(x^2 + y^2 + z^2)
+```
+
+```text Good
+Fx: -x / sqrt(x^2 + y^2 + z^2 + 0.001)
+```
+</Accordion>
+
+<Accordion title="Missing parentheses">
+Be explicit with operator precedence:
+
+```text Ambiguous
+Fx: 2 * x + y / z
+```
+
+```text Clear
+Fx: (2 * x) + (y / z)
+```
+</Accordion>
+
+<Accordion title="Using degrees instead of radians">
+All trigonometric functions expect radians:
+
+```text Wrong (treating as degrees)
+Fx: sin(90)
+```
+
+```text Correct (convert to radians)
+Fx: sin(90 * PI / 180)
+```
+</Accordion>
+
+</AccordionGroup>
+
+## Testing Your Formulas
+
+To verify your formulas work correctly:
+
+1. Start with a single particle
+2. Set `deltaT` to a small value (0.001 - 0.01)
+3. Enable **Force: INDIVIDUAL** mode to visualize force vectors
+4. Enable the **Trail** to see the particle's path
+5. Check the **Info Panel** for position and velocity values
+
+<Tip>
+Use the INFO panel to monitor real-time values of position (x, y, z) and velocity while testing your formulas.
+</Tip>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Particle Editor" icon="sliders" href="/guides/particle-editor">
+    Learn how to add and edit forces in the editor interface
+  </Card>
+  <Card title="Events System" icon="bolt" href="/guides/events">
+    Trigger actions based on formula-driven conditions
+  </Card>
+</CardGroup>

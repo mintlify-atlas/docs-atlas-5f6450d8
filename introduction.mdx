@@ -1,0 +1,144 @@
+---
+title: Introduction
+description: Welcome to Particle Simulator - a real-time particle simulation and visualization engine built with React and Three.js
+---
+
+## What is Particle Simulator?
+
+Particle Simulator is a real-time particle simulation and visualization engine that brings physics to life in your browser. Built with **React**, **Three.js**, and **TypeScript**, it provides an interactive 3D environment where you can create particles, define forces, and watch complex physics simulations unfold in real-time.
+
+<Note>
+  Originally created as a tool for academic self-defense against challenging Physics 2 exams, this simulator has evolved into a powerful educational and visualization platform.
+</Note>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Dual Physics Modes" icon="atom">
+    Switch between **Dynamic mode** (force-based) and **Kinematic mode** (position functions) to simulate different types of motion.
+  </Card>
+  
+  <Card title="Real-Time 3D Visualization" icon="cube">
+    Powered by Three.js with interactive camera controls, particle trails, force vectors, and customizable views.
+  </Card>
+  
+  <Card title="Advanced Formula Support" icon="function">
+    Use mathematical expressions with full JavaScript Math library support including trigonometric, hyperbolic, and logarithmic functions.
+  </Card>
+  
+  <Card title="Performance Optimized" icon="gauge-high">
+    Handle 100+ particles with stable FPS through function caching and direct mesh manipulation that bypasses React's render cycle.
+  </Card>
+</CardGroup>
+
+## Use Cases
+
+### Educational Physics Visualization
+- Visualize complex force interactions and particle dynamics
+- Understand harmonic oscillators, gravitational systems, and damped motion
+- Experiment with different initial conditions and observe outcomes
+
+### Scientific Simulations
+- Model N-body problems with custom force laws
+- Simulate orbital mechanics and gravitational attractions
+- Test inverse-square laws and other physical principles
+
+### Creative Exploration
+- Create mesmerizing patterns with Lissajous curves and resonance
+- Design pulsing vortices and hyperbolic damping effects
+- Build custom particle systems with event-driven behaviors
+
+## Architecture Overview
+
+Particle Simulator is built on a modern web stack:
+
+```text
+React 19.2        → UI components and state management
+Three.js 0.182    → 3D rendering and visualization
+@react-three/fiber → React renderer for Three.js
+@react-three/drei  → Useful helpers for 3D scenes
+Vite 7.2          → Fast development and build tooling
+TypeScript 5.9    → Type-safe code
+```
+
+### Project Structure
+
+The codebase is organized into logical modules:
+
+```text
+src/
+├── App.tsx            # Main application entry point
+├── gui/               # User interface components
+│   ├── GUI.tsx        # Main control panel
+│   ├── InfoPanel.tsx  # Real-time statistics display
+│   └── ParticleEditor.tsx # Particle configuration editor
+├── Particula/         # Core physics engine
+│   ├── Escenario.tsx  # 3D scene setup and orchestration
+│   ├── Movimiento.ts  # Movement calculations and physics
+│   └── Particula.tsx  # Individual particle components
+└── Utils/             # Visualization helpers
+    ├── Axes.tsx       # 3D coordinate axes
+    ├── ForceArrow.tsx # Force vector rendering
+    └── PhysicsUpdate.tsx # Physics loop integration
+```
+
+## Technical Highlights
+
+### Function Caching System
+
+Mathematical expressions are compiled once and cached to avoid constant re-parsing:
+
+```typescript
+const formulaCache: Record<string, Function> = {};
+
+export const evaluarFormula = (
+  formula: string,
+  t: number,
+  x: number = 0,
+  y: number = 0,
+  z: number = 0
+): number => {
+  const cacheKey = formula.toLowerCase().trim();
+  let fn = formulaCache[cacheKey];
+  
+  if (!fn) {
+    const cleanedFormula = cacheKey.replace(/\^/g, "**");
+    fn = new Function("t", "x", "y", "z", ...mathKeys,
+      `return ${cleanedFormula}`
+    );
+    formulaCache[cacheKey] = fn;
+  }
+  
+  return fn(t, x, y, z, ...mathValues);
+};
+```
+
+This approach provides near-native performance for formula evaluation.
+
+### Direct Mesh Manipulation
+
+Particle positions are updated directly on Three.js mesh references, bypassing React's render cycle for smooth 60 FPS performance even with 100+ particles.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get your first simulation running in minutes
+  </Card>
+  
+  <Card title="Installation" icon="download" href="/installation">
+    Set up the development environment locally
+  </Card>
+  
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Learn about particle properties and physics settings
+  </Card>
+  
+  <Card title="Examples" icon="flask" href="/physics/trajectory-examples">
+    Explore pre-built simulations and patterns
+  </Card>
+</CardGroup>
+
+<Tip>
+  Try the [live demo](https://particle-simulator-psy.netlify.app/) to see Particle Simulator in action without any installation.
+</Tip>

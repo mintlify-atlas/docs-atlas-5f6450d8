@@ -1,0 +1,154 @@
+---
+title: Kinematic vs Dynamic Simulation
+description: Understanding the two simulation modes in the Particle Simulator
+---
+
+The Particle Simulator supports two fundamentally different approaches to calculating particle motion: **kinematic** and **dynamic** simulation. Understanding when to use each mode is crucial for creating accurate and efficient simulations.
+
+## The Two Modes
+
+### Kinematic Mode (isMassless = true)
+
+Kinematic simulation calculates position **directly from mathematical formulas** at each time step. The particle follows a predetermined path defined by position equations.
+
+```tsx
+// Kinematic calculation from PhysicsUpdate.tsx
+if (p.isMassless) {
+  const nx = p.p0_fis[0] + 
+    evaluarFormula(p.fx, nt, live.pos[0], live.pos[1], live.pos[2]) + 
+    p.v0_fis[0] * nt;
+  const ny = p.p0_fis[1] + 
+    evaluarFormula(p.fy, nt, live.pos[0], live.pos[1], live.pos[2]) + 
+    p.v0_fis[1] * nt;
+  const nz = p.p0_fis[2] + 
+    evaluarFormula(p.fz, nt, live.pos[0], live.pos[1], live.pos[2]) + 
+    p.v0_fis[2] * nt - 
+    0.5 * g_val * Math.pow(nt, 2);
+  posFinal = [nx, ny, nz];
+}
+```
+
+**Formula structure:**
+```
+position(t) = initial_position + formula(t) + initial_velocity * t + ½ * gravity * t²
+```
+
+<Note>
+In kinematic mode, the particle's trajectory is **deterministic** and calculated from time alone. Forces applied to the particle are ignored in the simulation.
+</Note>
+
+### Dynamic Mode (isMassless = false)
+
+Dynamic simulation uses **Newton's second law (F = ma)** to calculate forces, acceleration, velocity, and finally position. The particle responds to all applied forces.
+
+```tsx
+// Dynamic calculation uses Velocity Verlet integration
+// Step 1: Update position using previous acceleration
+posFinal = [
+  live.pos[0] + live.vel[0] * dT + 0.5 * accOld[0] * dT * dT,
+  live.pos[1] + live.vel[1] * dT + 0.5 * accOld[1] * dT * dT,
+  live.pos[2] + live.vel[2] * dT + 0.5 * accOld[2] * dT * dT,
+];
+
+// Step 2: Calculate forces and new acceleration
+const sumF = p.forces.reduce((acc, f) => { /* ... */ }, [0, 0, 0]);
+accNew = [
+  (sumF[0] + friccionX) / m,
+  (sumF[1] + friccionY) / m,
+  sumF[2] / m - g_val,
+];
+
+// Step 3: Update velocity using average acceleration
+velFinal = [
+  live.vel[0] + 0.5 * (accOld[0] + accNew[0]) * dT,
+  live.vel[1] + 0.5 * (accOld[1] + accNew[1]) * dT,
+  live.vel[2] + 0.5 * (accOld[2] + accNew[2]) * dT,
+];
+```
+
+## Mathematical Differences
+
+| Aspect | Kinematic Mode | Dynamic Mode |
+|--------|---------------|-------------|
+| **Input** | Position formulas f(t) | Forces F(t, x, y, z) |
+| **Physics Law** | Direct calculation | F = ma |
+| **Integration** | Analytical | Numerical (Velocity Verlet) |
+| **Mass** | Ignored | Required (default: 1 kg) |
+| **Forces** | Decorative only | Fully simulated |
+| **Friction** | Not applied | Applied when enabled |
+| **Energy** | Not conserved | Conserved (within numerical limits) |
+
+## The isMassless Flag
+
+The `isMassless` flag in the particle data structure determines which mode is active:
+
+```typescript
+interface PData {
+  // ... other properties
+  isMassless: boolean;  // true = kinematic, false = dynamic
+  mass: number;         // Only used when isMassless = false
+  forces: Force[];      // Only applied when isMassless = false
+}
+```
+
+<Warning>
+The name `isMassless` can be misleading. It doesn't mean the particle has zero mass—it means the simulation **ignores mass and forces** entirely, using kinematic equations instead.
+</Warning>
+
+## When to Use Each Approach
+
+### Use Kinematic Mode When:
+
+✅ You have an **exact mathematical formula** for the trajectory  
+✅ You want to demonstrate **analytical solutions** (projectile motion, circular motion)  
+✅ You need **perfect precision** without numerical errors  
+✅ Forces and interactions are not important  
+✅ You want to visualize a predetermined path
+
+**Example use case:** Demonstrating that a projectile follows the parabola y = x - x²/20
+
+### Use Dynamic Mode When:
+
+✅ You want to simulate **real physical interactions**  
+✅ You need **force-based** behavior (springs, drag, electric fields)  
+✅ You want **friction** and ground interactions  
+✅ You're modeling systems where forces change based on position  
+✅ You need particles to respond to **multiple simultaneous forces**
+
+**Example use case:** Simulating a ball rolling down a ramp with friction
+
+## Switching Between Modes
+
+You can change the simulation mode by toggling the `isMassless` flag in the particle editor. When switching modes:
+
+- **Kinematic → Dynamic**: The particle will start responding to forces. Set appropriate mass and initial conditions.
+- **Dynamic → Kinematic**: Forces will be ignored. Define position formulas to control the motion.
+
+<Note>
+Both modes respect the **ground constraint** (z ≤ 0) and apply gravity when enabled, but only dynamic mode calculates the actual ground reaction forces.
+</Note>
+
+## Example Comparison
+
+Here's the same projectile motion in both modes:
+
+**Kinematic (with formula):**
+```javascript
+// Position formulas
+fx = "0"           // No additional x displacement
+fy = "0"           // No additional y displacement  
+fz = "0"           // No additional z displacement
+v0 = [10, 0, 10]   // Initial velocity
+// Gravity is applied: z(t) = z₀ + v₀t - ½gt²
+```
+
+**Dynamic (with forces):**
+```javascript
+// No formulas, just initial conditions
+v0 = [10, 0, 10]   // Initial velocity
+mass = 1           // 1 kg
+forces = []        // No additional forces
+// Gravity is applied: a = F/m = -g
+```
+
+Both produce identical trajectories (within numerical precision), but the dynamic mode can respond to additional forces like wind or drag.

@@ -1,0 +1,430 @@
+---
+title: GUI Component
+description: User interface controls for the simulation
+---
+
+## Overview
+
+The `GUI` component provides the main user interface for controlling the simulation. It features collapsible sections for controls, environment settings, particle management, and configuration save/load functionality.
+
+**File**: `src/gui/GUI.tsx`
+
+## Interface
+
+```typescript
+interface GUIProps {
+  isVisible: boolean;
+  onAdd: (x: number, y: number, z: number) => void;
+  onPlay: (val: boolean) => void;
+  onReset: () => void;
+  onGravity: (val: boolean) => void;
+  onTogglePath: (val: boolean) => void;
+  onToggleAxes: (val: boolean) => void;
+  onFocus: (part: PData) => void;
+  onResetCamera: () => void;
+  friction: number;
+  setFriction: (v: number) => void;
+  deltaT: number;
+  setDeltaT: (v: number) => void;
+  isRunning: boolean;
+  gravity: boolean;
+  path: boolean;
+  axes: boolean;
+  showGrid: boolean;
+  setShowGrid: (val: boolean) => void;
+  showParticles: boolean;
+  setShowParticles: (val: boolean) => void;
+  particleRadius: number;
+  setParticleRadius: (v: number) => void;
+  particulas: PData[];
+  onUpdatePart: (id: number, data: any) => void;
+  onDelete: (id: number) => void;
+  onLoadConfig?: (config: SavedConfig) => void;
+  forceMode: ForceDisplayMode;
+  setForceMode: (mode: ForceDisplayMode) => void;
+  showInfo: boolean;
+  setShowInfo: (val: boolean) => void;
+  physicsRefs: MutableRefObject<Record<number, LiveData>>;
+}
+```
+
+## Props
+
+### Visibility & State
+
+<ParamField path="isVisible" type="boolean" required>
+  Controls whether the GUI is visible
+</ParamField>
+
+<ParamField path="isRunning" type="boolean" required>
+  Current simulation state (running/paused)
+</ParamField>
+
+### Control Callbacks
+
+<ParamField path="onPlay" type="(val: boolean) => void" required>
+  Callback to start/pause simulation
+</ParamField>
+
+<ParamField path="onReset" type="() => void" required>
+  Callback to reset simulation to initial state
+</ParamField>
+
+<ParamField path="onAdd" type="(x: number, y: number, z: number) => void" required>
+  Callback to add a new particle at specified coordinates
+</ParamField>
+
+### Environment Settings
+
+<ParamField path="gravity" type="boolean" required>
+  Current gravity state
+</ParamField>
+
+<ParamField path="onGravity" type="(val: boolean) => void" required>
+  Callback to toggle gravity
+</ParamField>
+
+<ParamField path="friction" type="number" required>
+  Ground friction coefficient (0-2)
+</ParamField>
+
+<ParamField path="setFriction" type="(v: number) => void" required>
+  Callback to update friction value
+</ParamField>
+
+<ParamField path="deltaT" type="number" required>
+  Physics time step (0.001-0.1 seconds)
+</ParamField>
+
+<ParamField path="setDeltaT" type="(v: number) => void" required>
+  Callback to update time step
+</ParamField>
+
+### Visualization Settings
+
+<ParamField path="path" type="boolean" required>
+  Whether particle trails are visible
+</ParamField>
+
+<ParamField path="onTogglePath" type="(val: boolean) => void" required>
+  Callback to toggle trail visibility
+</ParamField>
+
+<ParamField path="axes" type="boolean" required>
+  Whether coordinate axes are visible
+</ParamField>
+
+<ParamField path="onToggleAxes" type="(val: boolean) => void" required>
+  Callback to toggle axes visibility
+</ParamField>
+
+<ParamField path="showGrid" type="boolean" required>
+  Whether ground grid is visible
+</ParamField>
+
+<ParamField path="setShowGrid" type="(val: boolean) => void" required>
+  Callback to toggle grid visibility
+</ParamField>
+
+<ParamField path="showParticles" type="boolean" required>
+  Whether particle spheres are visible
+</ParamField>
+
+<ParamField path="setShowParticles" type="(val: boolean) => void" required>
+  Callback to toggle particle visibility
+</ParamField>
+
+<ParamField path="particleRadius" type="number" required>
+  Radius of particle spheres (0.1-3)
+</ParamField>
+
+<ParamField path="setParticleRadius" type="(v: number) => void" required>
+  Callback to update particle radius
+</ParamField>
+
+<ParamField path="forceMode" type="ForceDisplayMode" required>
+  Force visualization mode (0=off, 1=resultant, 2=individual)
+</ParamField>
+
+<ParamField path="setForceMode" type="(mode: ForceDisplayMode) => void" required>
+  Callback to change force display mode
+</ParamField>
+
+<ParamField path="showInfo" type="boolean" required>
+  Whether info panel is visible
+</ParamField>
+
+<ParamField path="setShowInfo" type="(val: boolean) => void" required>
+  Callback to toggle info panel
+</ParamField>
+
+### Camera Controls
+
+<ParamField path="onFocus" type="(part: PData) => void" required>
+  Callback to focus camera on a particle
+</ParamField>
+
+<ParamField path="onResetCamera" type="() => void" required>
+  Callback to reset camera to default position
+</ParamField>
+
+### Particle Management
+
+<ParamField path="particulas" type="PData[]" required>
+  Array of all particles in the simulation
+</ParamField>
+
+<ParamField path="onUpdatePart" type="(id: number, data: any) => void" required>
+  Callback to update a particle's properties
+</ParamField>
+
+<ParamField path="onDelete" type="(id: number) => void" required>
+  Callback to delete a particle
+</ParamField>
+
+<ParamField path="physicsRefs" type="MutableRefObject<Record<number, LiveData>>" required>
+  Ref object containing live physics data for all particles
+</ParamField>
+
+### Configuration
+
+<ParamField path="onLoadConfig" type="(config: SavedConfig) => void">
+  Optional callback to load a saved configuration
+</ParamField>
+
+## GUI Sections
+
+The GUI is organized into collapsible sections:
+
+### 1. Controls Section
+
+```tsx
+<div className="section">
+  <div className="section-header" onClick={() => toggleSection('controls')}>
+    <h4>Controls</h4>
+    <span className={`toggle-icon ${openSections.controls ? 'open' : ''}`}>▼</span>
+  </div>
+  {openSections.controls && (
+    <div className="section-content">
+      <button
+        className={p.isRunning ? "btn-pause" : "btn-play"}
+        onClick={() => p.onPlay(!p.isRunning)}
+      >
+        {p.isRunning ? "PAUSE" : "START"}
+      </button>
+      <button onClick={p.onReset}>RESET</button>
+    </div>
+  )}
+</div>
+```
+
+Contains:
+- Start/Pause button
+- Reset button
+
+### 2. Environment Section
+
+Controls for simulation environment:
+
+- **Gravity**: Toggle gravity on/off
+- **Trail**: Toggle particle trails
+- **Axes**: Toggle coordinate axes
+- **Grid**: Toggle ground grid
+- **Particles**: Toggle particle sphere visibility
+- **Particle Size**: Slider to adjust particle radius (0.1-3.0)
+- **Forces Display**: Cycle through force visualization modes (OFF → Resultant → Individual)
+- **Info**: Toggle info panel
+- **Ground Friction**: Slider to adjust friction coefficient (0-2)
+- **Delta T**: Slider to adjust physics time step (0.001-0.1)
+
+### 3. New Particle Section
+
+```tsx
+<div className="section-content">
+  <div style={{ display: "flex", gap: 4 }}>
+    <input type="number" placeholder="X" value={nX} onChange={(e) => setNX(Number(e.target.value))} />
+    <input type="number" placeholder="Y" value={nY} onChange={(e) => setNY(Number(e.target.value))} />
+    <input type="number" placeholder="Z" value={nZ} onChange={(e) => setNZ(Number(e.target.value))} />
+  </div>
+  <button className="btn-play" onClick={() => p.onAdd(nX, nY, nZ)}>
+    + ADD PARTICLE
+  </button>
+</div>
+```
+
+Allows adding new particles:
+- X, Y, Z coordinate inputs
+- Add particle button
+
+### 4. Particles List Section
+
+```tsx
+<div className="lista-particulas">
+  {p.particulas.map((part) => (
+    <div
+      key={part.id}
+      className="particle-item"
+      onClick={(e) => {
+        if (e.shiftKey) {
+          p.onResetCamera();
+          return;
+        }
+        setSelId(part.id);
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        p.onFocus(part);
+      }}
+      style={{ color: selId === part.id ? "#fff" : part.color }}
+    >
+      <span>
+        P-{part.id.toString().slice(-3)} {part.enSuelo ? "(Ground)" : ""}
+      </span>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          p.onDelete(part.id);
+          if (selId === part.id) setSelId(null);
+        }}
+        className="btn-delete"
+      >
+        x
+      </button>
+    </div>
+  ))}
+</div>
+```
+
+Displays all particles with:
+- Click to select and edit
+- Right-click to focus camera
+- Shift+click to reset camera
+- Delete button for each particle
+- Ground indicator when particle is on the ground
+
+## Configuration Management
+
+### Save Configuration
+
+```typescript
+const handleSaveConfig = () => {
+  const config: SavedConfig = {
+    version: "1.0",
+    timestamp: new Date().toISOString(),
+    settings: {
+      gravity: p.gravity,
+      friction: p.friction,
+      deltaT: p.deltaT,
+      path: p.path,
+      axes: p.axes,
+    },
+    particulas: p.particulas,
+  };
+
+  const blob = new Blob([JSON.stringify(config, null, 2)], { 
+    type: "application/json" 
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `physics-config-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+```
+
+Saves current simulation state as JSON file including:
+- Version and timestamp
+- All environment settings
+- All particle configurations
+
+### Load Configuration
+
+```typescript
+const handleLoadConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const config: SavedConfig = JSON.parse(event.target?.result as string);
+      if (p.onLoadConfig) {
+        p.onLoadConfig(config);
+      }
+    } catch (err) {
+      alert("Error loading configuration file");
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = ""; // Reset input
+};
+```
+
+Loads configuration from JSON file.
+
+### Load Example
+
+```typescript
+const handleLoadExample = async () => {
+  try {
+    const response = await fetch('/default.json');
+    const config: SavedConfig = await response.json();
+    if (p.onLoadConfig) {
+      p.onLoadConfig(config);
+    }
+  } catch (err) {
+    alert("Error loading example");
+  }
+};
+```
+
+Loads a default example configuration from `public/default.json`.
+
+## Particle Editor Integration
+
+When a particle is selected, the ParticleEditor component is rendered:
+
+```tsx
+{sel && (
+  <ParticleEditor
+    sel={sel}
+    onUpdatePart={p.onUpdatePart}
+    onClose={() => setSelId(null)}
+  />
+)}
+```
+
+This provides a detailed editor for:
+- Initial position and velocity
+- Mass and massless mode
+- Force definitions
+- Event triggers
+- Particle color
+
+## Info Panel Integration
+
+```tsx
+<InfoPanel
+  particulas={p.particulas}
+  physicsRefs={p.physicsRefs}
+  gravity={p.gravity}
+  friction={p.friction}
+  isVisible={p.showInfo}
+  isRunning={p.isRunning}
+/>
+```
+
+Displays real-time information about all particles when enabled.
+
+## Auto-Pause on Edit
+
+```typescript
+useEffect(() => {
+  if (selId !== null) p.onPlay(false);
+}, [selId]);
+```
+
+Automatically pauses the simulation when a particle is selected for editing.

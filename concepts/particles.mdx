@@ -1,0 +1,504 @@
+---
+title: Particles
+description: Understanding particle properties, creation, and management in Particle Simulator
+---
+
+Particles are the fundamental entities in the simulator. Each particle has a set of properties that define its physical state, appearance, and behavior over time.
+
+## Particle Data Structure
+
+Every particle is represented by the `PData` interface, which contains all the information needed to simulate and visualize its motion.
+
+```typescript
+export interface PData {
+  id: number;
+  p0_fis: [number, number, number];
+  v0_fis: [number, number, number];
+  a0_fis: [number, number, number];
+  fx: string;
+  fy: string;
+  fz: string;
+  curr_fis: [number, number, number];
+  curr_vel: [number, number, number];
+  t: number;
+  trail_three: [number, number, number][];
+  enSuelo: boolean;
+  color: string;
+  mass: number;
+  isMassless: boolean;
+  forces: Force[];
+  events: ParticleEvent[];
+}
+```
+
+## Core Properties
+
+### Position, Velocity, and Acceleration
+
+Particles track both their **initial conditions** (with `0_fis` suffix) and **current state**:
+
+#### Initial Conditions
+
+```typescript
+p0_fis: [number, number, number]  // Initial position [x, y, z]
+v0_fis: [number, number, number]  // Initial velocity [vx, vy, vz]
+a0_fis: [number, number, number]  // Initial acceleration [ax, ay, az]
+```
+
+These values define the particle's state at `t = 0` and are used when resetting the simulation.
+
+<Info>
+The coordinate system uses `[x, y, z]` where:
+- **x**: Horizontal axis (red)
+- **y**: Horizontal axis perpendicular to x (green) 
+- **z**: Vertical axis (blue)
+</Info>
+
+#### Current State
+
+```typescript
+curr_fis: [number, number, number]  // Current position
+curr_vel: [number, number, number]  // Current velocity
+t: number                           // Current simulation time
+```
+
+The current state is continuously updated during simulation.
+
+### LiveData Structure
+
+During simulation, particle state is tracked in a separate `LiveData` structure for performance:
+
+```typescript
+export interface LiveData {
+  pos: [number, number, number];      // Current position
+  vel: [number, number, number];      // Current velocity
+  acc: [number, number, number];      // Current acceleration (for Velocity Verlet)
+  t: number;                          // Current time
+  trail: [number, number, number][];  // Trail points for visualization
+  frameCount: number;                 // Frame counter for trail sampling
+}
+```
+
+<Note>
+The acceleration (`acc`) in `LiveData` stores the acceleration from the previous frame, which is essential for the Velocity Verlet integration algorithm used in dynamic mode.
+</Note>
+
+## Visual Properties
+
+### Color
+
+Each particle has a customizable color defined as a hex string:
+
+```typescript
+color: string  // Example: "#00ff88", "#ff0088"
+```
+
+The particle is rendered as a sphere with this color, including an emissive glow effect:
+
+```typescript
+<sphereGeometry args={[radius, 16, 16]} />
+<meshStandardMaterial
+  color={color}
+  emissive={color}
+  emissiveIntensity={0.5}
+/>
+```
+
+<Tip>
+Colors can be changed dynamically during simulation using particle events. See the events system for more details.
+</Tip>
+
+### Trails
+
+Particles can display a visual trail showing their path through space:
+
+```typescript
+trail_three: [number, number, number][]  // Trail points in Three.js coordinates
+```
+
+Trails are sampled periodically (every 5 frames) to balance visual quality with performance:
+
+```typescript
+// From PhysicsUpdate.tsx:326-330
+if (live.frameCount % 5 === 0) {
+  live.trail = [
+    ...live.trail,
+    [posFinal[1], posFinal[2], posFinal[0]] as [number, number, number],
+  ].slice(-200) as [number, number, number][];
+}
+```
+
+The trail is limited to the most recent 200 points to prevent memory issues in long simulations.
+
+## Physics Properties
+
+### Mass
+
+```typescript
+mass: number  // Particle mass in kg
+```
+
+Mass is **only used in dynamic mode** (when `isMassless` is `false`). It determines how forces affect the particle's acceleration:
+
+```math
+a = F / m
+```
+
+Heavier particles accelerate more slowly under the same force.
+
+<Warning>
+If you set `mass` to 0 or a very small value in dynamic mode, it may cause numerical instability. The code uses a minimum mass of `0.001` as a safeguard:
+
+```typescript
+const m = p.mass || 0.001;
+```
+</Warning>
+
+### Simulation Mode Flag
+
+```typescript
+isMassless: boolean  // true = kinematic mode, false = dynamic mode
+```
+
+This flag determines which physics algorithm is used:
+- **`true`**: Kinematic mode - position-based trajectories
+- **`false`**: Dynamic mode - force-based physics
+
+See [Simulation Modes](/concepts/simulation-modes) for detailed information.
+
+### Trajectory Formulas (Kinematic Mode Only)
+
+```typescript
+fx: string  // X-displacement formula
+fy: string  // Y-displacement formula  
+fz: string  // Z-displacement formula
+```
+
+In kinematic mode, these formulas define the particle's trajectory as mathematical expressions:
+
+```typescript
+fx: "5*cos(t)"     // Circular motion in x
+fy: "5*sin(t)"     // Circular motion in y
+fz: "2*t"          // Linear rise in z
+```
+
+The formulas can use:
+- `t`: time
+- `x`, `y`, `z`: current position
+- Math functions: `sin`, `cos`, `sqrt`, `exp`, etc.
+- Operators: `+`, `-`, `*`, `/`, `**` (power)
+
+<Info>
+Formulas are parsed and cached for performance using the `evaluarFormula` function in `Movimiento.ts:9-45`.
+</Info>
+
+### Forces (Dynamic Mode Only)
+
+```typescript
+forces: Force[]  // Array of forces acting on the particle
+```
+
+In dynamic mode, motion is determined by forces. Multiple forces can act simultaneously:
+
+```typescript
+forces: [
+  { id: 1, vec: ["-0.5*x", "0", "0"] },      // Spring force
+  { id: 2, vec: ["0", "-0.1*vy", "0"] }      // Damping force
+]
+```
+
+See [Forces](/concepts/forces) for detailed information about the force system.
+
+## Particle Creation
+
+Particles are created using the `addParticle` function:
+
+```typescript
+// From Escenario.tsx:49-82
+const addParticle = (x: number, y: number, z: number) => {
+  const id = Date.now();
+  const randomColor = `#${Math.floor(Math.random() * 16777215)
+    .toString(16)
+    .padStart(6, "0")}`;
+  
+  const nueva: PData = {
+    id,
+    p0_fis: [x, y, z],
+    v0_fis: [0, 0, 0],
+    a0_fis: [0, 0, 0],
+    fx: "0",
+    fy: "0",
+    fz: "0",
+    curr_fis: [x, y, z],
+    curr_vel: [0, 0, 0],
+    t: 0,
+    trail_three: [[y, z, x]],
+    enSuelo: false,
+    color: randomColor,
+    mass: 1,
+    isMassless: true,  // Starts in kinematic mode
+    forces: [],
+    events: [],
+  };
+  
+  // Initialize physics state
+  physicsRefs.current[id] = {
+    pos: [x, y, z],
+    vel: [0, 0, 0],
+    acc: [0, 0, 0],
+    t: 0,
+    trail: [[y, z, x]],
+    frameCount: 0,
+  };
+  
+  setParts([...parts, nueva]);
+};
+```
+
+Key points:
+- Each particle gets a unique ID based on timestamp
+- Random color is generated automatically
+- Particles start in kinematic mode by default
+- Initial position is specified, velocity and acceleration are zero
+- Physics state is initialized simultaneously
+
+## Particle Management
+
+### Updating Particles
+
+Particles can be updated during simulation:
+
+```typescript
+// From Escenario.tsx:138-156
+const updateParticle = (id: number, data: any) => {
+  setParts((prev) =>
+    prev.map((p) => {
+      if (p.id === id) {
+        const updated = { ...p, ...data, t: 0, enSuelo: false };
+        // Reset physics state
+        physicsRefs.current[id] = {
+          pos: updated.p0_fis,
+          vel: updated.v0_fis,
+          acc: [0, 0, 0],
+          t: 0,
+          trail: [[updated.p0_fis[1], updated.p0_fis[2], updated.p0_fis[0]]],
+          frameCount: 0,
+        };
+        return updated;
+      }
+      return p;
+    })
+  );
+};
+```
+
+<Note>
+Updating a particle resets its simulation state to the initial conditions. This is useful when modifying forces, mass, or initial position/velocity.
+</Note>
+
+### Resetting Particles
+
+The simulation can be reset to return all particles to their initial state:
+
+```typescript
+// From Escenario.tsx:84-112
+const handleReset = () => {
+  setRun(false);
+  parts.forEach((p) => {
+    physicsRefs.current[p.id] = {
+      pos: [...p.p0_fis],
+      vel: [...p.v0_fis],
+      acc: [0, 0, 0],
+      t: 0,
+      trail: [[p.p0_fis[1], p.p0_fis[2], p.p0_fis[0]]],
+      frameCount: 0,
+    };
+    if (meshRefs.current[p.id])
+      meshRefs.current[p.id].position.set(
+        p.p0_fis[1],
+        p.p0_fis[2],
+        p.p0_fis[0]
+      );
+  });
+  // Reset event triggers
+  setParts((prev) =>
+    prev.map((p) => ({
+      ...p,
+      t: 0,
+      enSuelo: false,
+      trail_three: [[p.p0_fis[1], p.p0_fis[2], p.p0_fis[0]]],
+      events: p.events?.map(e => ({ ...e, triggered: false })) || [],
+    }))
+  );
+};
+```
+
+### Deleting Particles
+
+Particles can be removed from the simulation:
+
+```typescript
+onDelete={(id) => {
+  setParts(parts.filter((p) => p.id !== id));
+  delete physicsRefs.current[id];
+  delete meshRefs.current[id];
+}}
+```
+
+This removes the particle from the state array and cleans up its associated references.
+
+## Particle Rendering
+
+Particles are rendered as 3D spheres using Three.js:
+
+```typescript
+// From Particula.tsx:10-23
+const Particula = forwardRef<Mesh, Props>(
+  ({ posicion, color = "#00ff88", radius = 0.5 }, ref) => {
+    return (
+      <mesh ref={ref} position={posicion}>
+        <sphereGeometry args={[radius, 16, 16]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.5}
+        />
+      </mesh>
+    );
+  }
+);
+```
+
+The particle:
+- Is rendered as a sphere with customizable radius (default 0.5)
+- Uses `meshStandardMaterial` for realistic lighting
+- Has an emissive glow matching its color
+- Can be hidden by setting radius to a very small value (0.001)
+
+<Tip>
+The particle radius can be adjusted globally through the GUI settings without affecting the physics calculations.
+</Tip>
+
+## Particle Groups
+
+Particles are managed within a `ParticleGroup` component that combines the visual sphere, trail, force vectors, and info display:
+
+```typescript
+// From ParticleGroup.tsx:56-92
+return (
+  <group ref={groupRef}>
+    <Particula
+      ref={(el) => {
+        if (el) meshRefs.current[p.id] = el;
+      }}
+      posicion={[liveData.pos[1], liveData.pos[2], liveData.pos[0]]}
+      color={p.color}
+      radius={showParticles ? particleRadius : 0.001}
+    />
+
+    {path && liveData.trail.length > 1 && (
+      <Line
+        points={liveData.trail}
+        color={p.color}
+        lineWidth={1.5}
+        transparent
+        opacity={0.6}
+      />
+    )}
+
+    <ForceVisualizer
+      p={p}
+      liveData={liveData}
+      forceMode={forceMode}
+      gravity={gravity}
+      friction={friction}
+    />
+
+    <ParticleInfo
+      p={p}
+      liveData={liveData}
+      showInfo={showInfo}
+      gravity={gravity}
+      friction={friction}
+    />
+  </group>
+);
+```
+
+## Event System
+
+Particles can have events that trigger actions based on conditions:
+
+```typescript
+events: ParticleEvent[]  // Array of particle events
+```
+
+Events allow particles to:
+- Pause the simulation when reaching a certain position
+- Change color based on velocity or time
+- Trigger actions when conditions are met
+
+Events are defined with conditions (e.g., `x > 10`, `t >= 5`) and actions (e.g., `pause`, `changeColor`).
+
+<Info>
+The event system is evaluated every frame in `PhysicsUpdate.tsx:302-324`. Events are only triggered once and marked with a `triggered` flag to prevent repeated firing.
+</Info>
+
+## Example: Complete Particle Configuration
+
+```typescript
+const exampleParticle: PData = {
+  id: 123456789,
+  
+  // Initial conditions
+  p0_fis: [0, 0, 15],          // Start 15 units high
+  v0_fis: [10, 0, 0],          // Initial velocity in x direction
+  a0_fis: [0, 0, 0],           // No initial acceleration
+  
+  // Trajectory formulas (kinematic mode)
+  fx: "0",
+  fy: "0",
+  fz: "0",
+  
+  // Current state
+  curr_fis: [0, 0, 15],
+  curr_vel: [10, 0, 0],
+  t: 0,
+  
+  // Visual properties
+  color: "#00ff88",
+  trail_three: [[0, 15, 0]],
+  
+  // Physics properties
+  mass: 2.5,
+  isMassless: false,           // Use dynamic mode
+  forces: [
+    {
+      id: 1,
+      vec: ["-0.2*vx", "0", "0"]  // Air resistance
+    }
+  ],
+  
+  // State flags
+  enSuelo: false,
+  
+  // Event system
+  events: [
+    {
+      id: 1,
+      name: "Ground contact",
+      conditions: [{ variable: 'z', operator: '<=', value: 0 }],
+      conditionLogic: 'AND',
+      actions: [{ type: 'pause' }],
+      triggered: false,
+      enabled: true
+    }
+  ]
+};
+```
+
+## Related Topics
+
+- [Simulation Modes](/concepts/simulation-modes) - Understanding kinematic vs dynamic modes
+- [Forces](/concepts/forces) - How to define forces for dynamic particles
+- [Visualization](/concepts/visualization) - How particles and trails are rendered

@@ -1,0 +1,312 @@
+---
+title: 3D Coordinate System
+description: Understanding the physics-to-rendering coordinate transformation
+---
+
+The Particle Simulator uses two different coordinate systems: one for physics calculations and another for rendering with Three.js. Understanding this transformation is essential for correctly interpreting positions and setting up particles.
+
+## The Two Coordinate Systems
+
+### Physics Coordinates
+
+Physics calculations use a standard right-handed coordinate system:
+
+- **X-axis**: Horizontal (left-right)
+- **Y-axis**: Horizontal (forward-backward)
+- **Z-axis**: Vertical (up-down)
+- **Ground plane**: z = 0
+
+```typescript
+// Physics position: [x, y, z]
+const physicsPos = [5, 10, 0]; // 5 right, 10 forward, 0 at ground level
+```
+
+### Three.js Rendering Coordinates
+
+Three.js uses a different convention:
+
+- **X-axis**: Horizontal (left-right) — but this is physics Y!
+- **Y-axis**: Vertical (up-down) — but this is physics Z!
+- **Z-axis**: Forward-backward — but this is physics X!
+- **Ground plane**: y = 0
+
+```typescript
+// Three.js position: [x, y, z]
+const threePos = [10, 0, 5]; // Same physical location
+```
+
+## The Coordinate Mapping
+
+The transformation between the two systems is:
+
+```
+Three.js [X, Y, Z] = Physics [Y, Z, X]
+```
+
+Or inversely:
+
+```
+Physics [X, Y, Z] = Three.js [Z, X, Y]
+```
+
+### Visualization
+
+```
+        Physics              Three.js
+         
+    Z (up)                Y (up)
+    |                     |
+    |                     |
+    |_____ Y (forward)    |_____ X (right)
+   /                     /
+  / X (right)           / Z (forward)
+```
+
+<Note>
+Think of it as **rotating the coordinate axes**: Physics Z becomes Three.js Y, Physics X becomes Three.js Z, and Physics Y becomes Three.js X.
+</Note>
+
+## Implementation in Code
+
+The coordinate transformation appears in several places throughout the codebase:
+
+### 1. Setting Mesh Position
+
+When updating the visual position of a particle:
+
+```tsx
+// From PhysicsUpdate.tsx lines 333-337
+if (meshRefs.current[p.id]) {
+  meshRefs.current[p.id].position.set(
+    posFinal[1],  // Three.js X = Physics Y
+    posFinal[2],  // Three.js Y = Physics Z
+    posFinal[0]   // Three.js Z = Physics X
+  );
+}
+```
+
+### 2. Trail Visualization
+
+When storing trail points for rendering:
+
+```tsx
+// From PhysicsUpdate.tsx lines 326-331
+if (live.frameCount % 5 === 0) {
+  live.trail = [
+    ...live.trail,
+    [posFinal[1], posFinal[2], posFinal[0]] as [number, number, number],
+    //  ^^^^^^^^^^^^  ^^^^^^^^^^^^  ^^^^^^^^^^^^
+    //  Three.js X    Three.js Y    Three.js Z
+    //  (Physics Y)   (Physics Z)   (Physics X)
+  ].slice(-200) as [number, number, number][];
+}
+```
+
+### 3. Particle Initialization
+
+When creating a new particle in the scene:
+
+```tsx
+// From Escenario.tsx lines 73-80
+physicsRefs.current[id] = {
+  pos: [x, y, z],  // Physics coordinates
+  vel: [0, 0, 0],
+  acc: [0, 0, 0],
+  t: 0,
+  trail: [[y, z, x]],  // Three.js coordinates for rendering
+  //       ^  ^  ^
+  frameCount: 0,
+};
+```
+
+### 4. Resetting Position
+
+When resetting particles to initial positions:
+
+```tsx
+// From Escenario.tsx lines 96-100
+if (meshRefs.current[p.id])
+  meshRefs.current[p.id].position.set(
+    p.p0_fis[1],  // Three.js X = Physics Y
+    p.p0_fis[2],  // Three.js Y = Physics Z  
+    p.p0_fis[0]   // Three.js Z = Physics X
+  );
+```
+
+## The Axes Visualization
+
+The `Axes.tsx` component shows the coordinate system with colored axes:
+
+```tsx
+// From Axes.tsx
+
+// Red line: Three.js X-axis (Physics Y)
+<Line
+  points={[[-AXIS_LENGTH, 0, 0], [AXIS_LENGTH, 0, 0]]}
+  color="red"
+/>
+
+// Green line: Three.js Y-axis (Physics Z) 
+<Line
+  points={[[0, -AXIS_LENGTH, 0], [0, AXIS_LENGTH, 0]]}
+  color="green"
+/>
+
+// Blue line: Three.js Z-axis (Physics X)
+<Line
+  points={[[0, 0, -AXIS_LENGTH], [0, 0, AXIS_LENGTH]]}
+  color="blue"  
+/>
+```
+
+When you enable axes in the GUI:
+- **Red**: Horizontal (Physics Y)
+- **Green**: Vertical (Physics Z, up-down)
+- **Blue**: Horizontal (Physics X)
+
+<Note>
+The green axis points upward—this is the vertical direction in both systems, though it's called Z in physics and Y in Three.js.
+</Note>
+
+## Why This Transformation Exists
+
+### Physics Convention
+
+In physics and engineering, it's standard to use Z as the vertical axis:
+- Z = height above ground
+- Ground plane at z = 0
+- Gravity acts in the -Z direction
+
+This matches how we think about 3D space in real-world terms.
+
+### Three.js Convention
+
+Three.js (and many 3D graphics libraries) use Y as the vertical axis:
+- Y = height above ground
+- Ground plane at y = 0  
+- This matches 2D screen coordinates (x-right, y-up) extended into 3D
+
+This is common in computer graphics and game engines.
+
+### The Solution
+
+Rather than forcing physicists to think in graphics coordinates or graphics programmers to think in physics coordinates, the simulator:
+
+1. **Stores** physics data in physics coordinates (x, y, z)
+2. **Calculates** all physics in physics coordinates
+3. **Transforms** to Three.js coordinates only for rendering
+
+This keeps the physics code clean and intuitive.
+
+## Ground Plane Collision
+
+The ground collision detection works in physics coordinates:
+
+```tsx
+// From PhysicsUpdate.tsx line 181
+const enSuelo = posFinal[2] <= 0;
+//                        ^
+//                Physics Z-coordinate
+```
+
+When a particle's Z-coordinate (vertical position in physics) reaches zero or below:
+
+```tsx
+// From PhysicsUpdate.tsx lines 188-189  
+if (enSuelo) {
+  posFinal[2] = 0;  // Clamp to ground level
+  // Calculate normal force, friction, etc.
+}
+```
+
+In the rendered scene, this appears as particles stopping at y = 0 (Three.js ground plane).
+
+## Practical Examples
+
+### Example 1: Placing a Particle
+
+To place a particle at "5 meters right, 10 meters forward, 3 meters up":
+
+```typescript
+// Physics coordinates (what you specify)
+const pos = [5, 10, 3];  // [x, y, z]
+
+// This is automatically converted to Three.js:
+// mesh.position.set(10, 3, 5)
+//                   ^   ^  ^
+//                   y   z  x
+```
+
+### Example 2: Setting Initial Velocity
+
+To launch a particle "horizontally forward at 5 m/s":
+
+```typescript
+// Physics coordinates
+const v0 = [0, 5, 0];  // [vx, vy, vz]
+//          ^  ^  ^
+//          no motion in X (right/left)
+//          5 m/s in Y (forward)
+//          no motion in Z (up/down)
+```
+
+The particle will move in the +Y physics direction, which renders as movement along the +X Three.js axis.
+
+### Example 3: Interpreting Force Vectors
+
+A force vector `[10, 0, -5]` in physics coordinates means:
+
+- **+10 N** in the X direction (right)
+- **0 N** in the Y direction (forward/backward)
+- **-5 N** in the Z direction (downward)
+
+This would push the particle to the right and down.
+
+## Common Pitfalls
+
+<Warning>
+**Don't mix coordinate systems!** Always use physics coordinates [x, y, z] for:
+- Initial positions `p0_fis`
+- Initial velocities `v0_fis`
+- Force formulas
+- Physics calculations
+
+The transformation to Three.js coordinates happens automatically.
+</Warning>
+
+### Pitfall 1: Camera Position
+
+The camera in `Escenario.tsx` is positioned at:
+
+```tsx
+<Canvas camera={{ position: [50, 50, 50], far: 10000 }}>
+```
+
+This is **Three.js coordinates** [50, 50, 50], which corresponds to:
+- Physics position: [50, 50, 50] rotated → [Z=50, X=50, Y=50]
+- The camera is viewing from a diagonal angle
+
+### Pitfall 2: Grid Orientation
+
+The grid helper is positioned at Three.js y = 0:
+
+```tsx
+<primitive object={new GridHelper(2000, 100)} position={[0, 0, 0]} />
+```
+
+This represents the **physics z = 0 plane** (ground level).
+
+## Summary Table
+
+| Physics | Three.js | Meaning |
+|---------|----------|--------|
+| X | Z | Horizontal (depth) |
+| Y | X | Horizontal (right) |
+| Z | Y | Vertical (up) |
+| z = 0 | y = 0 | Ground plane |
+| z > 0 | y > 0 | Above ground |
+| z < 0 | y < 0 | Below ground (clamped) |
+
+<Note>
+When reading the source code, remember: **physics calculations use [x, y, z]**, but **mesh positions use [y, z, x]**. The transformation is consistent throughout the codebase.
+</Note>

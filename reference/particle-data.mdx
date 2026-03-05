@@ -1,0 +1,252 @@
+---
+title: 'PData Interface'
+description: 'Complete particle data structure containing position, velocity, forces, and events'
+---
+
+## Overview
+
+The `PData` interface defines the complete state and configuration of a particle in the simulation. Each particle maintains its physical properties, motion state, applied forces, and event triggers.
+
+## Interface Definition
+
+```typescript
+export interface PData {
+  id: number;
+  p0_fis: [number, number, number];
+  v0_fis: [number, number, number];
+  a0_fis: [number, number, number];
+  fx: string;
+  fy: string;
+  fz: string;
+  curr_fis: [number, number, number];
+  curr_vel: [number, number, number];
+  t: number;
+  trail_three: [number, number, number][];
+  enSuelo: boolean;
+  color: string;
+  mass: number;
+  isMassless: boolean;
+  forces: Force[];
+  events: ParticleEvent[];
+}
+```
+
+## Fields
+
+<ParamField path="id" type="number" required>
+  Unique identifier for the particle. Used to reference and manage individual particles in the simulation.
+</ParamField>
+
+### Initial Conditions
+
+<ParamField path="p0_fis" type="[number, number, number]" required>
+  Initial position vector in 3D space `[x, y, z]`. Defines where the particle starts in the simulation.
+  
+  ```json
+  "p0_fis": [20, 0, 0]
+  ```
+</ParamField>
+
+<ParamField path="v0_fis" type="[number, number, number]" required>
+  Initial velocity vector `[vx, vy, vz]`. Defines the particle's starting velocity in each dimension.
+  
+  ```json
+  "v0_fis": [0, 8, 0]
+  ```
+</ParamField>
+
+<ParamField path="a0_fis" type="[number, number, number]" required>
+  Initial acceleration vector `[ax, ay, az]`. Typically set to `[0, 0, 0]` unless starting with specific acceleration.
+  
+  ```json
+  "a0_fis": [0, 0, 0]
+  ```
+</ParamField>
+
+### Force Formulas
+
+<ParamField path="fx" type="string">
+  Formula string for force in x-direction. Can reference variables `t`, `x`, `y`, `z` and use Math functions. Leave empty or "0" for no force.
+  
+  ```json
+  "fx": "-x * abs(cos(t*0.2))"
+  ```
+</ParamField>
+
+<ParamField path="fy" type="string">
+  Formula string for force in y-direction. Supports mathematical expressions with time and position variables.
+  
+  ```json
+  "fy": "-y * abs(cos(t*0.2))"
+  ```
+</ParamField>
+
+<ParamField path="fz" type="string">
+  Formula string for force in z-direction. Can include complex expressions with trigonometric functions.
+  
+  ```json
+  "fz": "-z * 0.5 + 20 * tanh(sin(t + 0.31))"
+  ```
+</ParamField>
+
+### Current State
+
+<ParamField path="curr_fis" type="[number, number, number]" required>
+  Current position vector `[x, y, z]`. Updated each simulation step based on velocity and acceleration.
+</ParamField>
+
+<ParamField path="curr_vel" type="[number, number, number]" required>
+  Current velocity vector `[vx, vy, vz]`. Updated each step based on forces and acceleration.
+</ParamField>
+
+<ParamField path="t" type="number" required>
+  Elapsed simulation time in seconds for this particle. Incremented by `deltaT` each step.
+</ParamField>
+
+### Visualization
+
+<ParamField path="trail_three" type="[number, number, number][]" required>
+  Array of position points forming the particle's trajectory trail. Each element is a `[x, y, z]` position.
+  
+  Used to render the motion path when path visualization is enabled.
+</ParamField>
+
+<ParamField path="color" type="string" required>
+  Hexadecimal color code for the particle. Supports standard CSS color formats.
+  
+  ```json
+  "color": "#ff00ff"
+  ```
+</ParamField>
+
+### Physics Properties
+
+<ParamField path="mass" type="number" required>
+  Particle mass in kilograms. Affects force calculations via Newton's second law (F = ma).
+  
+  ```json
+  "mass": 5
+  ```
+</ParamField>
+
+<ParamField path="enSuelo" type="boolean" required>
+  Ground contact flag. `true` when particle is touching the ground (y ≤ 0), enabling friction calculations.
+</ParamField>
+
+<ParamField path="isMassless" type="boolean" required>
+  Kinematic mode flag. When `true`, the particle ignores forces and follows purely kinematic motion (constant velocity).
+</ParamField>
+
+### Advanced Systems
+
+<ParamField path="forces" type="Force[]" required>
+  Array of force objects applied to the particle. Forces are evaluated and combined each simulation step.
+  
+  See [Force System](/reference/force-system) for details.
+  
+  ```json
+  "forces": [
+    {
+      "id": 1,
+      "vec": ["-x * 0.5", "-y * 0.5", "20"]
+    }
+  ]
+  ```
+</ParamField>
+
+<ParamField path="events" type="ParticleEvent[]" required>
+  Array of event triggers that can modify particle behavior when conditions are met.
+  
+  See [Event System](/reference/event-system) for details.
+  
+  ```json
+  "events": [
+    {
+      "id": 1,
+      "name": "Ground Impact",
+      "conditions": [{"variable": "y", "operator": "<=", "value": 0}],
+      "conditionLogic": "AND",
+      "actions": [{"type": "changeColor", "payload": "#ff0000"}],
+      "triggered": false,
+      "enabled": true
+    }
+  ]
+  ```
+</ParamField>
+
+## Creating Particles
+
+### Basic Particle
+
+```json
+{
+  "id": 1,
+  "color": "#00ff00",
+  "mass": 1,
+  "p0_fis": [0, 10, 0],
+  "v0_fis": [5, 0, 0],
+  "forces": []
+}
+```
+
+### Particle with Forces
+
+```json
+{
+  "id": 9001,
+  "color": "#ff00ff",
+  "mass": 5,
+  "p0_fis": [20, 0, 0],
+  "v0_fis": [0, 8, 0],
+  "forces": [
+    {
+      "id": 1,
+      "vec": [
+        "-x * abs(cos(t*0.2))",
+        "-y * abs(cos(t*0.2))",
+        "-z * 0.5 + 20 * tanh(sin(t + 0.31))"
+      ]
+    }
+  ]
+}
+```
+
+### Kinematic Particle
+
+```json
+{
+  "id": 100,
+  "color": "#0000ff",
+  "mass": 1,
+  "isMassless": true,
+  "p0_fis": [0, 0, 0],
+  "v0_fis": [10, 0, 0],
+  "forces": []
+}
+```
+
+## Runtime Behavior
+
+### Initialization
+When a particle is created:
+1. `curr_fis` is set to `p0_fis`
+2. `curr_vel` is set to `v0_fis`
+3. `t` is set to `0`
+4. `trail_three` is initialized as empty array
+5. `enSuelo` is calculated based on initial y-position
+
+### Each Simulation Step
+1. Forces are evaluated from `fx`, `fy`, `fz` formulas and `forces` array
+2. Net force is calculated by summing all force components
+3. Acceleration is computed: `a = F_net / mass` (unless `isMassless`)
+4. Velocity is updated: `v = v + a * deltaT`
+5. Position is updated: `p = p + v * deltaT`
+6. Current position is added to `trail_three`
+7. Events are checked and triggered
+8. Time `t` is incremented by `deltaT`
+
+## Related
+
+- [Force System](/reference/force-system) - Define forces applied to particles
+- [Event System](/reference/event-system) - Create conditional behaviors
+- [Configuration Guide](/guides/configuration) - Configure particle arrays and save/load setups

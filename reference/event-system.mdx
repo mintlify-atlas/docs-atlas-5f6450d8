@@ -1,0 +1,440 @@
+---
+title: 'Event System'
+description: 'Create conditional behaviors and triggers for particles based on simulation state'
+---
+
+## Overview
+
+The event system enables particles to respond dynamically to simulation conditions. Events monitor particle state (position, velocity, time) and trigger actions when specified conditions are met.
+
+## Event Interfaces
+
+### ParticleEvent
+
+```typescript
+export interface ParticleEvent {
+  id: number;
+  name: string;
+  conditions: EventCondition[];
+  conditionLogic: 'AND' | 'OR';
+  actions: EventAction[];
+  triggered: boolean;
+  enabled: boolean;
+}
+```
+
+<ParamField path="id" type="number" required>
+  Unique identifier for the event within the particle's event array.
+  
+  ```json
+  "id": 1
+  ```
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Human-readable name describing the event's purpose.
+  
+  ```json
+  "name": "Ground Impact"
+  ```
+</ParamField>
+
+<ParamField path="conditions" type="EventCondition[]" required>
+  Array of conditions that must be satisfied for the event to trigger. See [EventCondition](#eventcondition) below.
+  
+  ```json
+  "conditions": [
+    {"variable": "y", "operator": "<=", "value": 0},
+    {"variable": "vy", "operator": "<", "value": 0}
+  ]
+  ```
+</ParamField>
+
+<ParamField path="conditionLogic" type="'AND' | 'OR'" required>
+  Logic operator for combining multiple conditions:
+  - `"AND"` - All conditions must be true
+  - `"OR"` - At least one condition must be true
+  
+  ```json
+  "conditionLogic": "AND"
+  ```
+</ParamField>
+
+<ParamField path="actions" type="EventAction[]" required>
+  Array of actions to execute when conditions are met. See [EventAction](#eventaction) below.
+  
+  ```json
+  "actions": [
+    {"type": "pause"},
+    {"type": "changeColor", "payload": "#ff0000"}
+  ]
+  ```
+</ParamField>
+
+<ParamField path="triggered" type="boolean" required>
+  Internal flag indicating whether the event has already fired. Events only trigger once unless reset.
+  
+  ```json
+  "triggered": false
+  ```
+</ParamField>
+
+<ParamField path="enabled" type="boolean" required>
+  Controls whether the event is active. Set to `false` to temporarily disable without removing the event.
+  
+  ```json
+  "enabled": true
+  ```
+</ParamField>
+
+### EventCondition
+
+```typescript
+export interface EventCondition {
+  variable: 'x' | 'y' | 'z' | 't' | 'vx' | 'vy' | 'vz' | 'v';
+  operator: '==' | '>' | '<' | '>=' | '<=' | '!=';
+  value: number;
+}
+```
+
+<ParamField path="variable" type="string" required>
+  The particle state variable to monitor:
+  - `"x"`, `"y"`, `"z"` - Position components
+  - `"vx"`, `"vy"`, `"vz"` - Velocity components
+  - `"v"` - Total velocity magnitude (speed)
+  - `"t"` - Elapsed simulation time
+  
+  ```json
+  "variable": "y"
+  ```
+</ParamField>
+
+<ParamField path="operator" type="string" required>
+  Comparison operator:
+  - `"=="` - Equal to (with floating-point tolerance)
+  - `">"` - Greater than
+  - `"<"` - Less than
+  - `">="` - Greater than or equal to
+  - `"<="` - Less than or equal to
+  - `"!="` - Not equal to
+  
+  ```json
+  "operator": "<="
+  ```
+</ParamField>
+
+<ParamField path="value" type="number" required>
+  The threshold value for comparison.
+  
+  ```json
+  "value": 0
+  ```
+</ParamField>
+
+### EventAction
+
+```typescript
+export interface EventAction {
+  type: 'pause' | 'changeColor';
+  payload?: string;
+}
+```
+
+<ParamField path="type" type="string" required>
+  The action to perform when the event triggers:
+  
+  - `"pause"` - Pause the entire simulation
+  - `"changeColor"` - Change the particle's color (requires `payload`)
+  
+  ```json
+  "type": "changeColor"
+  ```
+</ParamField>
+
+<ParamField path="payload" type="string">
+  Additional data for the action. Required for `changeColor`, contains the new hex color code.
+  
+  ```json
+  "payload": "#ff0000"
+  ```
+</ParamField>
+
+## How Events Work
+
+### Evaluation Order
+
+Each simulation step:
+1. Particle state is updated (position, velocity)
+2. Each enabled event is checked:
+   - If `triggered === true`, skip
+   - Evaluate all conditions
+   - Combine using `conditionLogic` (AND/OR)
+   - If conditions pass, execute all actions
+   - Set `triggered = true`
+3. Continue to next particle
+
+### One-Shot Behavior
+
+Events trigger only once per particle. Once `triggered` is set to `true`, the event won't fire again unless manually reset.
+
+<Note>
+  To create repeating events, you would need to programmatically reset `triggered` to `false` or create multiple events.
+</Note>
+
+## Examples
+
+### Ground Impact Detection
+
+```json
+{
+  "id": 1,
+  "name": "Hit Ground",
+  "conditions": [
+    {"variable": "y", "operator": "<=", "value": 0}
+  ],
+  "conditionLogic": "AND",
+  "actions": [
+    {"type": "changeColor", "payload": "#ff0000"}
+  ],
+  "triggered": false,
+  "enabled": true
+}
+```
+
+Changes particle color to red when it reaches or falls below ground level (y ≤ 0).
+
+### Time-Based Event
+
+```json
+{
+  "id": 2,
+  "name": "5 Second Mark",
+  "conditions": [
+    {"variable": "t", "operator": ">=", "value": 5.0}
+  ],
+  "conditionLogic": "AND",
+  "actions": [
+    {"type": "pause"}
+  ],
+  "triggered": false,
+  "enabled": true
+}
+```
+
+Pauses simulation after 5 seconds of elapsed time.
+
+### Velocity Threshold
+
+```json
+{
+  "id": 3,
+  "name": "High Speed",
+  "conditions": [
+    {"variable": "v", "operator": ">", "value": 50}
+  ],
+  "conditionLogic": "AND",
+  "actions": [
+    {"type": "changeColor", "payload": "#ffff00"}
+  ],
+  "triggered": false,
+  "enabled": true
+}
+```
+
+Changes particle to yellow when total velocity exceeds 50 units/second.
+
+### Boundary Detection
+
+```json
+{
+  "id": 4,
+  "name": "Left Boundary",
+  "conditions": [
+    {"variable": "x", "operator": "<", "value": -100}
+  ],
+  "conditionLogic": "AND",
+  "actions": [
+    {"type": "changeColor", "payload": "#00ff00"}
+  ],
+  "triggered": false,
+  "enabled": true
+}
+```
+
+Detects when particle crosses x = -100 boundary.
+
+### Multiple Conditions (AND)
+
+```json
+{
+  "id": 5,
+  "name": "Impact with Downward Motion",
+  "conditions": [
+    {"variable": "y", "operator": "<=", "value": 0},
+    {"variable": "vy", "operator": "<", "value": 0}
+  ],
+  "conditionLogic": "AND",
+  "actions": [
+    {"type": "changeColor", "payload": "#ff00ff"}
+  ],
+  "triggered": false,
+  "enabled": true
+}
+```
+
+Only triggers if particle is at ground level AND moving downward (prevents triggering when bouncing up).
+
+### Multiple Conditions (OR)
+
+```json
+{
+  "id": 6,
+  "name": "High Position",
+  "conditions": [
+    {"variable": "x", "operator": ">", "value": 100},
+    {"variable": "y", "operator": ">", "value": 100},
+    {"variable": "z", "operator": ">", "value": 100}
+  ],
+  "conditionLogic": "OR",
+  "actions": [
+    {"type": "changeColor", "payload": "#00ffff"}
+  ],
+  "triggered": false,
+  "enabled": true
+}
+```
+
+Triggers if particle is beyond 100 units in ANY direction.
+
+### Multiple Actions
+
+```json
+{
+  "id": 7,
+  "name": "Critical Event",
+  "conditions": [
+    {"variable": "y", "operator": "<", "value": -50}
+  ],
+  "conditionLogic": "AND",
+  "actions": [
+    {"type": "changeColor", "payload": "#ff0000"},
+    {"type": "pause"}
+  ],
+  "triggered": false,
+  "enabled": true
+}
+```
+
+Changes color AND pauses simulation when particle falls below y = -50.
+
+## Use Cases
+
+### Collision Detection
+
+Detect when particles reach specific positions:
+
+```json
+{
+  "conditions": [
+    {"variable": "x", "operator": ">=", "value": 50},
+    {"variable": "x", "operator": "<=", "value": 55}
+  ],
+  "conditionLogic": "AND",
+  "actions": [{"type": "changeColor", "payload": "#ff0000"}]
+}
+```
+
+### Debug Markers
+
+Visually highlight specific simulation states:
+
+```json
+{
+  "conditions": [
+    {"variable": "t", "operator": ">=", "value": 2.5}
+  ],
+  "conditionLogic": "AND",
+  "actions": [{"type": "changeColor", "payload": "#00ff00"}]
+}
+```
+
+### Performance Analysis
+
+Pause at critical moments for inspection:
+
+```json
+{
+  "conditions": [
+    {"variable": "v", "operator": "<", "value": 0.1}
+  ],
+  "conditionLogic": "AND",
+  "actions": [{"type": "pause"}]
+}
+```
+
+### Phase Visualization
+
+Change colors to represent different motion phases:
+
+```json
+[
+  {
+    "id": 1,
+    "name": "Ascending",
+    "conditions": [{"variable": "vy", "operator": ">", "value": 0}],
+    "conditionLogic": "AND",
+    "actions": [{"type": "changeColor", "payload": "#00ff00"}],
+    "triggered": false,
+    "enabled": true
+  },
+  {
+    "id": 2,
+    "name": "Descending",
+    "conditions": [{"variable": "vy", "operator": "<", "value": 0}],
+    "conditionLogic": "AND",
+    "actions": [{"type": "changeColor", "payload": "#ff0000"}],
+    "triggered": false,
+    "enabled": true
+  }
+]
+```
+
+<Warning>
+  Remember events are one-shot. The above example will trigger once for ascending and once for descending, but won't toggle repeatedly.
+</Warning>
+
+## Limitations
+
+### One-Shot Only
+
+Events trigger once and remain triggered. No built-in support for repeating events or resetting conditions.
+
+### Limited Actions
+
+Currently only `pause` and `changeColor` actions are supported. Cannot modify forces, mass, or other particle properties.
+
+### No Particle Interaction
+
+Events cannot trigger based on other particles' states or inter-particle distances.
+
+### Floating-Point Precision
+
+For equality checks (`==`, `!=`), be aware of floating-point precision issues. Use range checks instead:
+
+```json
+// Instead of: {"variable": "y", "operator": "==", "value": 0}
+// Use range:
+{
+  "conditions": [
+    {"variable": "y", "operator": ">=", "value": -0.01},
+    {"variable": "y", "operator": "<=", "value": 0.01}
+  ],
+  "conditionLogic": "AND"
+}
+```
+
+## Related
+
+- [PData Interface](/reference/particle-data) - Complete particle structure
+- [Force System](/reference/force-system) - Define forces for particles
+- [Scene Configuration](/reference/scene-config) - Configure events in scene files

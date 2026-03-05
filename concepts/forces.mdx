@@ -1,0 +1,518 @@
+---
+title: Forces
+description: Understanding the force system and how forces affect particle motion
+---
+
+In dynamic mode, particle motion is governed by forces rather than predefined trajectories. The force system allows you to create realistic physics simulations with multiple interacting forces.
+
+<Note>
+Forces are **only used in dynamic mode** (when `isMassless` is `false`). Kinematic particles ignore forces and follow trajectory formulas instead.
+</Note>
+
+## Force Interface
+
+Forces are defined using a simple interface:
+
+```typescript
+export interface Force {
+  id: number;                        // Unique identifier
+  vec: [string, string, string];     // Force components [Fx, Fy, Fz]
+}
+```
+
+Each force has three components (x, y, z) defined as **mathematical formulas** rather than fixed values. This allows forces to:
+- Vary with time
+- Depend on position (e.g., spring forces)
+- Depend on velocity (e.g., drag forces)
+- Create complex dynamic behaviors
+
+## Defining Forces
+
+Forces are defined as string formulas that can use several variables:
+
+### Available Variables
+
+- **`t`**: Current simulation time
+- **`x`, `y`, `z`**: Current particle position components
+- **Math functions**: `sin`, `cos`, `tan`, `sqrt`, `exp`, `log`, `abs`, `pow`, etc.
+- **Constants**: `PI`, `E`, etc.
+- **Operators**: `+`, `-`, `*`, `/`, `**` (power), `^` (converted to `**`)
+
+### Example Force Definitions
+
+```typescript
+// Constant force (like thrust)
+{
+  id: 1,
+  vec: ["10", "0", "0"]  // 10N constant force in x direction
+}
+
+// Spring force (Hooke's law: F = -kx)
+{
+  id: 2,
+  vec: ["-0.5*x", "-0.5*y", "-0.5*z"]  // Spring constant k=0.5
+}
+
+// Damping force (proportional to velocity)
+// Note: velocity is computed internally, but you can approximate
+{
+  id: 3,
+  vec: ["-0.1*vx", "-0.1*vy", "-0.1*vz"]  // Note: v variables not directly available
+}
+
+// Time-varying force
+{
+  id: 4,
+  vec: ["5*sin(t)", "5*cos(t)", "0"]  // Rotating force
+}
+
+// Position-dependent force (central force)
+{
+  id: 5,
+  vec: ["-x/(x**2+y**2+z**2)**1.5", "-y/(x**2+y**2+z**2)**1.5", "-z/(x**2+y**2+z**2)**1.5"]
+  // Gravitational-like force toward origin
+}
+
+// Oscillating force
+{
+  id: 6,
+  vec: ["10*sin(2*PI*t)", "0", "0"]  // Oscillates with period 1 second
+}
+```
+
+<Tip>
+Formulas are evaluated using JavaScript's function constructor and cached for performance. Write them as valid JavaScript expressions.
+</Tip>
+
+## Force Evaluation
+
+Forces are evaluated at each simulation step using the `evaluarFormula` function:
+
+```typescript
+// From Movimiento.ts:9-45
+export const evaluarFormula = (
+  formula: string,
+  t: number,
+  x: number = 0,
+  y: number = 0,
+  z: number = 0
+): number => {
+  try {
+    if (!formula || formula.trim() === "" || formula === "0") return 0;
+
+    const cacheKey = formula.toLowerCase().trim();
+    let fn = formulaCache[cacheKey];
+
+    if (!fn) {
+      // Replace ^ with ** for powers
+      const cleanedFormula = cacheKey.replace(/\^/g, "**");
+      
+      // Create function injecting t, x, y, z and all Math functions
+      fn = new Function(
+        "t", "x", "y", "z", ...mathKeys,
+        `return (function() { 
+          try { 
+            return ${cleanedFormula}; 
+          } catch(e) { return 0; } 
+        })()`
+      );
+      formulaCache[cacheKey] = fn;
+    }
+
+    const resultado = fn(t, x, y, z, ...mathValues);
+    return typeof resultado === "number" && !isNaN(resultado) ? resultado : 0;
+  } catch (e) {
+    return 0;
+  }
+};
+```
+
+Key features:
+- Formulas are cached after first evaluation for performance
+- Empty or invalid formulas return 0
+- All `Math` functions are injected into the evaluation context
+- Power operator `^` is automatically converted to `**`
+- Errors in evaluation return 0 instead of crashing
+
+## Multiple Forces on a Particle
+
+A particle can have multiple forces acting on it simultaneously. The simulator calculates the **resultant force** by vector addition:
+
+```typescript
+// From PhysicsUpdate.tsx:148-174
+const sumF = p.forces.reduce(
+  (acc, f) => {
+    const fx = evaluarFormula(
+      f.vec[0],
+      nt,              // current time
+      posFinal[0],     // current x position
+      posFinal[1],     // current y position
+      posFinal[2]      // current z position
+    );
+    const fy = evaluarFormula(
+      f.vec[1],
+      nt,
+      posFinal[0],
+      posFinal[1],
+      posFinal[2]
+    );
+    const fz = evaluarFormula(
+      f.vec[2],
+      nt,
+      posFinal[0],
+      posFinal[1],
+      posFinal[2]
+    );
+    return [acc[0] + fx, acc[1] + fy, acc[2] + fz];
+  },
+  [0, 0, 0]
+);
+```
+
+The resultant force is:
+
+```math
+\vec{F}_{resultant} = \sum_{i=1}^{n} \vec{F}_i
+```
+
+### Example: Spring with Damping
+
+```typescript
+const particle: PData = {
+  // ... other properties ...
+  mass: 1.0,
+  isMassless: false,
+  forces: [
+    {
+      id: 1,
+      vec: ["-2*x", "-2*y", "-2*z"]  // Spring force (k=2)
+    },
+    {
+      id: 2,
+      vec: ["-0.5*vx", "-0.5*vy", "-0.5*vz"]  // Damping (c=0.5)
+      // Note: This is conceptual - actual velocity damping needs different approach
+    }
+  ]
+};
+```
+
+<Warning>
+Velocity variables (`vx`, `vy`, `vz`) are not directly available in force formulas. To create velocity-dependent forces like damping, you need to use position-based approximations or modify the physics engine.
+</Warning>
+
+## Built-in Forces
+
+Besides user-defined forces, the simulator includes two built-in forces:
+
+### Gravity
+
+Gravity is a global force that affects all particles in dynamic mode:
+
+```typescript
+const g_val = grav ? 9.80665 : 0;  // Gravitational acceleration in m/s²
+const peso = m * g_val;             // Weight force: F = mg
+```
+
+Gravity always acts downward (negative z-direction):
+
+```typescript
+// From PhysicsUpdate.tsx:251
+accNew = [
+  fuerzaResultanteX / m,
+  fuerzaResultanteY / m,
+  fuerzaResultanteZ / m - g_val,  // Gravity subtracted from z-acceleration
+];
+```
+
+<Info>
+The gravitational constant `9.80665 m/s²` is the standard Earth gravity. This can be toggled on/off globally but cannot be changed per-particle.
+</Info>
+
+### Friction
+
+Friction is a contact force that opposes motion when a particle is on the ground (`z ≤ 0`):
+
+```typescript
+// From PhysicsUpdate.tsx:197-239
+if (enSuelo && friction > 0) {
+  const friccionMax = friction * normal;  // Fmax = μN
+  
+  if (vHor > 1e-9) {
+    // Kinetic friction: opposes velocity
+    const dirX = vx / vHor;
+    const dirY = vy / vHor;
+    const friccionAplicada = Math.min(friccionMax, fuerzaHorizontal + m * vHor / dT);
+    
+    friccionX = -dirX * friccionAplicada;
+    friccionY = -dirY * friccionAplicada;
+  } else if (fuerzaHorizontal > 1e-9) {
+    // Static friction: opposes applied force
+    const dirFx = sumF[0] / fuerzaHorizontal;
+    const dirFy = sumF[1] / fuerzaHorizontal;
+    const friccionAplicada = Math.min(friccionMax, fuerzaHorizontal);
+    
+    friccionX = -dirFx * friccionAplicada;
+    friccionY = -dirFy * friccionAplicada;
+  }
+}
+```
+
+Friction calculation:
+1. **Normal force** is calculated from forces pushing the particle into the ground
+2. **Kinetic friction** (moving): Opposes velocity direction, magnitude = `μN`
+3. **Static friction** (stationary): Opposes applied forces, magnitude ≤ `μN`
+
+<Note>
+Friction coefficient `μ` (mu) is set globally and applies to all particles. The normal force `N` is calculated per-particle based on its mass and any forces pushing it into the ground.
+</Note>
+
+## Resultant Force Calculation
+
+The total resultant force on a particle includes:
+
+1. **User-defined forces** (sum of all forces in `forces` array)
+2. **Gravity** (if enabled)
+3. **Friction** (if on ground and friction > 0)
+4. **Normal force** (reaction force from ground, affects friction)
+
+```typescript
+// From PhysicsUpdate.tsx:242-252
+const fuerzaResultanteX = sumF[0] + friccionX;
+const fuerzaResultanteY = sumF[1] + friccionY;
+const fuerzaResultanteZ = sumF[2];
+
+// Convert force to acceleration: a = F/m
+accNew = [
+  fuerzaResultanteX / m,
+  fuerzaResultanteY / m,
+  fuerzaResultanteZ / m - g_val,  // Gravity added separately
+];
+```
+
+### Force Diagram
+
+```
+Resultant = User Forces + Gravity + Friction + Normal
+
+           ↑ Fuser
+           |
+           |      → Ffriction
+    ●------+------
+           |      (particle on ground)
+           ↓ Fg
+```
+
+For a particle on the ground:
+- Normal force balances the vertical component (preventing sinking)
+- Friction opposes horizontal motion
+- Gravity pulls downward
+- User forces can push in any direction
+
+## Force Visualization
+
+Forces can be visualized as colored arrows in the 3D view. The `ForceVisualizer` component supports three modes:
+
+### Mode 0: No Forces
+
+No force vectors are displayed.
+
+### Mode 1: Resultant Force Only
+
+Displays a single yellow arrow showing the net force:
+
+```typescript
+// From ForceVisualizer.tsx:117-128
+const resultant = {
+  fx: appliedForces.reduce((sum, f) => sum + f.fx, 0) + gravityForce.fx + frictionForce.fx,
+  fy: appliedForces.reduce((sum, f) => sum + f.fy, 0) + gravityForce.fy + frictionForce.fy,
+  fz: appliedForces.reduce((sum, f) => sum + f.fz, 0) + gravityForce.fz + frictionForce.fz,
+};
+
+const mag = Math.sqrt(resultant.fx ** 2 + resultant.fy ** 2 + resultant.fz ** 2);
+if (mag < 0.01) return null;
+
+const arrowLen = getArrowLength(mag);
+const dir = new Vector3(resultant.fy, resultant.fz, resultant.fx).normalize();
+return (
+  <primitive
+    object={new ArrowHelper(dir, origin.clone(), arrowLen, COLORS.resultant, arrowLen * 0.25, arrowLen * 0.15)}
+  />
+);
+```
+
+### Mode 2: Individual Forces
+
+Displays separate colored arrows for each force component:
+
+- **Cyan**: User-defined forces
+- **Green**: Gravity
+- **Magenta**: Friction
+
+```typescript
+// From ForceVisualizer.tsx:24-30
+const COLORS = {
+  resultant: 0xffff00,  // Yellow - resultant force
+  gravity: 0x00ff00,    // Green - gravity
+  friction: 0xff00ff,   // Magenta - friction
+  applied: 0x00ffff,    // Cyan - applied forces
+};
+```
+
+<Tip>
+Arrow length is scaled by force magnitude but capped at 2 units to prevent extremely long arrows from cluttering the view:
+
+```typescript
+const MAX_ARROW_LENGTH = 2;
+const SCALE_FACTOR = 0.1;
+const getArrowLength = (mag: number): number => {
+  return Math.min(mag * SCALE_FACTOR, MAX_ARROW_LENGTH);
+};
+```
+</Tip>
+
+## Common Force Patterns
+
+### Spring Force (Hooke's Law)
+
+A force proportional to displacement from origin:
+
+```typescript
+{
+  id: 1,
+  vec: ["-k*x", "-k*y", "-k*z"]  // Replace k with spring constant
+}
+```
+
+Example: `k = 1.0`
+```typescript
+vec: ["-1.0*x", "-1.0*y", "-1.0*z"]
+```
+
+### Central Force
+
+A force directed toward (or away from) the origin:
+
+```typescript
+// Attractive central force (like gravity)
+{
+  id: 1,
+  vec: [
+    "-G*x/(x**2+y**2+z**2)**1.5",
+    "-G*y/(x**2+y**2+z**2)**1.5",
+    "-G*z/(x**2+y**2+z**2)**1.5"
+  ]  // G is gravitational-like constant
+}
+```
+
+### Drag Force
+
+Since velocity is not directly available, you can approximate drag using position changes:
+
+```typescript
+// This is a conceptual example - actual implementation would need velocity access
+{
+  id: 1,
+  vec: ["-0.1*vx", "-0.1*vy", "-0.1*vz"]  // Not directly supported
+}
+```
+
+<Warning>
+Velocity-dependent forces are challenging because force formulas don't have direct access to velocity. Consider using the friction system for ground-based resistance or extending the physics engine for true drag forces.
+</Warning>
+
+### Magnetic-Like Force
+
+A force perpendicular to position (creates circular motion):
+
+```typescript
+{
+  id: 1,
+  vec: ["-B*y", "B*x", "0"]  // B is magnetic-like constant
+}
+```
+
+This creates motion in the xy-plane, similar to a charged particle in a magnetic field.
+
+### Time-Varying Force
+
+Forces that change over time:
+
+```typescript
+// Oscillating force
+{
+  id: 1,
+  vec: ["A*sin(omega*t)", "0", "0"]  // A=amplitude, omega=angular frequency
+}
+
+// Exponential decay
+{
+  id: 2,
+  vec: ["F0*exp(-lambda*t)", "0", "0"]  // F0=initial force, lambda=decay rate
+}
+
+// Step function (turn on at t=5)
+{
+  id: 3,
+  vec: ["t >= 5 ? 10 : 0", "0", "0"]  // Ternary operator
+}
+```
+
+## Force Examples with Mass
+
+Remember that acceleration depends on both force and mass: `a = F/m`
+
+```typescript
+// Light particle (fast acceleration)
+{
+  mass: 0.5,
+  forces: [{ id: 1, vec: ["10", "0", "0"] }]
+  // Acceleration: ax = 10/0.5 = 20 m/s²
+}
+
+// Heavy particle (slow acceleration)
+{
+  mass: 5.0,
+  forces: [{ id: 1, vec: ["10", "0", "0"] }]
+  // Acceleration: ax = 10/5.0 = 2 m/s²
+}
+```
+
+<Info>
+The same force produces less acceleration on heavier objects. This is Newton's second law: F = ma.
+</Info>
+
+## Performance Considerations
+
+### Formula Caching
+
+Formulas are parsed once and cached. This means:
+- First evaluation is slower (parsing)
+- Subsequent evaluations are fast (cached function)
+- Changing a formula invalidates the cache for that formula
+
+### Complex Formulas
+
+Very complex formulas can impact performance:
+
+```typescript
+// Simple (fast)
+vec: ["-0.5*x", "0", "0"]
+
+// Complex (slower)
+vec: [
+  "-0.5*x/(sqrt(x**2+y**2+z**2)**3)",
+  "-0.5*y/(sqrt(x**2+y**2+z**2)**3)",
+  "-0.5*z/(sqrt(x**2+y**2+z**2)**3)"
+]
+```
+
+For many particles with complex forces, consider:
+- Simplifying formulas where possible
+- Using approximations
+- Reducing the number of forces per particle
+
+## Related Topics
+
+- [Simulation Modes](/concepts/simulation-modes) - Learn about dynamic mode (force-based) vs kinematic mode
+- [Particles](/concepts/particles) - Understanding particle structure and properties
+- [Visualization](/concepts/visualization) - How force vectors are rendered

@@ -1,0 +1,602 @@
+---
+title: 'Controls & Shortcuts'
+description: 'Master the simulator controls, camera, and keyboard shortcuts'
+icon: 'gamepad'
+---
+
+## Simulator Controls Overview
+
+The Particle Simulator provides an intuitive interface with collapsible sections, real-time controls, and keyboard shortcuts for efficient workflow.
+
+## GUI Layout
+
+### Main Sections
+
+The GUI is organized into expandable sections:
+
+```typescript GUI.tsx
+const [openSections, setOpenSections] = useState({
+  controls: true,       // Play/Pause/Reset buttons
+  environment: true,    // Visual and physics settings
+  addParticle: false,   // New particle creation
+  particles: true,      // Particle list
+  config: true,         // Save/Load buttons
+});
+```
+
+Click any section header to expand or collapse it.
+
+### Section Indicators
+
+- **▼** (pointing down): Section is expanded
+- **▶** (pointing right): Section is collapsed
+
+## Play/Pause/Reset Controls
+
+### Start/Pause Button
+
+**State-dependent button that toggles simulation:**
+
+```typescript Controls
+<button
+  className={p.isRunning ? "btn-pause" : "btn-play"}
+  onClick={() => p.onPlay(!p.isRunning)}
+>
+  {p.isRunning ? "PAUSE" : "START"}
+</button>
+```
+
+- **START** (green): Begin or resume simulation
+- **PAUSE** (red): Pause simulation, maintaining current state
+
+<Tip>
+Pause the simulation to inspect particle positions, edit properties, or take screenshots.
+</Tip>
+
+### Reset Button
+
+**Returns all particles to initial conditions:**
+
+```typescript Escenario.tsx
+const handleReset = () => {
+  setRun(false);
+  parts.forEach((p) => {
+    physicsRefs.current[p.id] = {
+      pos: [...p.p0_fis],      // Reset to initial position
+      vel: [...p.v0_fis],      // Reset to initial velocity
+      acc: [0, 0, 0],          // Clear acceleration
+      t: 0,                    // Reset time
+      trail: [[p.p0_fis[1], p.p0_fis[2], p.p0_fis[0]]],
+      frameCount: 0,
+    };
+  });
+  // Reset all event triggered flags
+  setParts((prev) =>
+    prev.map((p) => ({
+      ...p,
+      events: p.events?.map(e => ({ ...e, triggered: false })) || [],
+    }))
+  );
+};
+```
+
+**What Reset does:**
+- Stops simulation
+- Returns particles to `p0_fis` positions
+- Restores initial velocities `v0_fis`
+- Clears particle trails
+- Resets event `triggered` flags
+- Sets time to t=0
+
+<Note>
+Reset does NOT change particle properties, forces, or events. It only restores initial conditions.
+</Note>
+
+## Environment Settings
+
+### Toggle Controls
+
+Each toggle button shows current state:
+
+#### Gravity Toggle
+
+```typescript
+<button onClick={() => p.onGravity(!p.gravity)}>
+  Gravity: {p.gravity ? "ON" : "OFF"}
+</button>
+```
+
+- **ON**: Applies 9.80665 m/s² downward acceleration (Earth gravity)
+- **OFF**: No gravitational force
+
+#### Trail Toggle
+
+```typescript
+<button onClick={() => p.onTogglePath(!p.path)}>
+  Trail: {p.path ? "ON" : "OFF"}
+</button>
+```
+
+- **ON**: Particles leave visible trail showing path history
+- **OFF**: No trail visualization
+- Trail stores last 200 points (every 5 frames)
+
+#### Axes Toggle
+
+```typescript
+<button onClick={() => p.onToggleAxes(!p.axes)}>
+  Axes: {p.axes ? "ON" : "OFF"}
+</button>
+```
+
+- **ON**: Displays 3D coordinate axes
+- **OFF**: Hides axes
+
+<Info>
+Axes help orient the 3D space:
+- **Red**: X-axis
+- **Green**: Y-axis  
+- **Blue**: Z-axis
+</Info>
+
+#### Grid Toggle
+
+```typescript
+<button onClick={() => p.setShowGrid(!p.showGrid)}>
+  Grid: {p.showGrid ? "ON" : "OFF"}
+</button>
+```
+
+- **ON**: Shows ground plane grid (2000x2000 units, 100 divisions)
+- **OFF**: Hides grid
+
+#### Particles Toggle
+
+```typescript
+<button onClick={() => p.setShowParticles(!p.showParticles)}>
+  Particles: {p.showParticles ? "ON" : "OFF"}
+</button>
+```
+
+- **ON**: Render particles as spheres
+- **OFF**: Hide particle meshes (trails still visible if enabled)
+
+<Tip>
+Disable particles to visualize only the motion trails, creating elegant path-only visualizations.
+</Tip>
+
+### Particle Size Slider
+
+**Available when particles are visible:**
+
+```typescript
+<label>Particle Size: {p.particleRadius.toFixed(2)}</label>
+<input
+  type="range"
+  min="0.1"
+  max="3"
+  step="0.1"
+  value={p.particleRadius}
+  onChange={(e) => p.setParticleRadius(Number(e.target.value))}
+/>
+```
+
+- **Range**: 0.1 to 3.0 units
+- **Default**: 0.15 units
+- **Real-time**: Changes apply immediately
+
+## Force Display Modes
+
+Visualize forces acting on particles:
+
+```typescript Force Mode Button
+<button
+  onClick={() => p.setForceMode(((p.forceMode + 1) % 3) as 0 | 1 | 2)}
+  style={{
+    background: p.forceMode === 0 ? "#666" : 
+                p.forceMode === 1 ? "#ff6b6b" : "#4ecdc4",
+  }}
+>
+  {p.forceMode === 0 ? "Forces: OFF" : 
+   p.forceMode === 1 ? "Forces: RESULTANT" : 
+   "Forces: INDIVIDUAL"}
+</button>
+```
+
+### Mode 0: Forces OFF
+
+- No force vectors displayed
+- **Background**: Gray (#666)
+- Best for final presentations
+
+### Mode 1: Forces RESULTANT
+
+- Shows **net force** (sum of all forces) as a single arrow
+- **Background**: Red (#ff6b6b)
+- Arrow length proportional to force magnitude
+- Useful for understanding total acceleration
+
+### Mode 2: Forces INDIVIDUAL
+
+- Shows **each force separately** as individual arrows
+- **Background**: Teal (#4ecdc4)
+- Best for debugging and understanding force composition
+- Color-coded by force type
+
+<Note>
+Force arrows are scaled for visibility. They represent force direction and relative magnitude, not exact lengths.
+</Note>
+
+## Info Panel Toggle
+
+```typescript
+<button
+  onClick={() => p.setShowInfo(!p.showInfo)}
+  style={{
+    background: p.showInfo ? "#ffc107" : "#666",
+    color: p.showInfo ? "#000" : "#fff",
+  }}
+>
+  {p.showInfo ? "Info: ON" : "Info: OFF"}
+</button>
+```
+
+- **ON** (Yellow): Displays real-time particle data panel
+- **OFF** (Gray): Hides info panel
+
+The info panel shows:
+- Particle ID
+- Current position (x, y, z)
+- Current velocity (vx, vy, vz)
+- Current speed (magnitude)
+- Elapsed time
+
+## Physics Parameters
+
+### Ground Friction Slider
+
+```typescript
+<label>Ground Friction: {p.friction.toFixed(2)}</label>
+<input
+  type="range"
+  min="0"
+  max="2"
+  step="0.01"
+  value={p.friction}
+  onChange={(e) => p.setFriction(Number(e.target.value))}
+/>
+```
+
+- **Range**: 0.00 to 2.00
+- **Default**: 0.20
+- **Effect**: Coefficient of friction when particles are on ground (z=0)
+- Higher values = more resistance to sliding
+
+**Friction Physics:**
+```typescript PhysicsUpdate.tsx
+if (enSuelo && normal > 0 && friction > 0) {
+  const friccionMax = friction * normal;
+  // Friction opposes motion direction
+  friccionX = -dirX * friccionAplicada;
+  friccionY = -dirY * friccionAplicada;
+}
+```
+
+### Delta T Slider
+
+```typescript
+<label>Delta T: {p.deltaT}</label>
+<input
+  type="range"
+  min="0.001"
+  max="0.1"
+  step="0.001"
+  value={p.deltaT}
+  onChange={(e) => p.setDeltaT(Number(e.target.value))}
+/>
+```
+
+- **Range**: 0.001 to 0.100 seconds
+- **Default**: 0.001 seconds
+- **Effect**: Time step size for physics integration
+
+**DeltaT Guidelines:**
+
+| Value | Use Case | Accuracy | Speed |
+|-------|----------|----------|-------|
+| 0.001 | Precise simulations | High | Slow |
+| 0.01 | General use | Medium | Medium |
+| 0.05+ | Fast visualization | Lower | Fast |
+
+<Warning>
+Large deltaT values (>0.05) can cause instability with strong forces. Particles may "explode" or behave erratically.
+</Warning>
+
+## Camera Controls
+
+### Orbit Controls (Mouse)
+
+**Three.js OrbitControls provide intuitive camera manipulation:**
+
+```typescript Escenario.tsx
+<OrbitControls makeDefault />
+```
+
+| Action | Control |
+|--------|----------|
+| **Rotate** | Left mouse button + drag |
+| **Pan** | Right mouse button + drag |
+| **Zoom** | Mouse wheel scroll |
+| **Zoom (trackpad)** | Two-finger pinch |
+
+### Focus Camera on Particle
+
+**Right-click a particle in the list:**
+
+```typescript GUI.tsx
+<div
+  onContextMenu={(e) => {
+    e.preventDefault();
+    p.onFocus(part);
+  }}
+>
+  P-{part.id}
+</div>
+```
+
+The camera smoothly moves to center on the selected particle.
+
+### Reset Camera Button
+
+```typescript
+<button onClick={p.onResetCamera} style={{ background: "#555" }}>
+  Reset Camera
+</button>
+```
+
+**Returns camera to default position:**
+- Position: [50, 50, 50]
+- Looking at origin [0, 0, 0]
+
+<Tip>
+**Shift + Click** on any particle in the list also resets the camera.
+</Tip>
+
+## Particle Management
+
+### Adding New Particles
+
+Expand the **"New Particle"** section:
+
+```typescript Add Particle
+<div style={{ display: "flex", gap: 4 }}>
+  <input type="number" placeholder="X" value={nX} />
+  <input type="number" placeholder="Y" value={nY} />
+  <input type="number" placeholder="Z" value={nZ} />
+</div>
+<button className="btn-play" onClick={() => p.onAdd(nX, nY, nZ)}>
+  + ADD PARTICLE
+</button>
+```
+
+**New particles are created with:**
+- Specified position [X, Y, Z]
+- Zero initial velocity [0, 0, 0]
+- Random color
+- Mass = 1 kg
+- Kinematics mode enabled
+- No forces or events
+
+### Particle List Interactions
+
+**Each particle in the list supports:**
+
+| Action | Effect |
+|--------|--------|
+| **Left Click** | Open particle editor |
+| **Right Click** | Focus camera on particle |
+| **Shift + Click** | Reset camera to default |
+| **Click X button** | Delete particle |
+
+```typescript Particle Item Display
+<div className="particle-item" style={{ color: part.color }}>
+  <span>
+    P-{part.id.toString().slice(-3)}
+    {part.enSuelo ? "(Ground)" : ""}
+  </span>
+  <button onClick={deleteParticle}>x</button>
+</div>
+```
+
+- **Color**: Matches particle color
+- **P-XXX**: Last 3 digits of ID
+- **(Ground)**: Shows when z ≤ 0
+
+### Deleting Particles
+
+```typescript Delete Handler
+const deleteParticle = (id: number) => {
+  setParts(parts.filter((p) => p.id !== id));
+  delete physicsRefs.current[id];
+  delete meshRefs.current[id];
+};
+```
+
+<Warning>
+Deleting a particle is **permanent** (until you reset or load a configuration). There is no undo.
+</Warning>
+
+## Configuration Management
+
+### Save Button
+
+```typescript
+<button className="btn-save" onClick={handleSaveConfig}>
+  SAVE
+</button>
+```
+
+Downloads current configuration as JSON file. See [Configuration Guide](/guides/configuration) for details.
+
+### Load Button
+
+```typescript
+<button className="btn-load" onClick={() => fileInputRef.current?.click()}>
+  LOAD
+</button>
+```
+
+Opens file dialog to load a saved configuration.
+
+### View Example Button
+
+```typescript
+<button className="btn-example" onClick={handleLoadExample}>
+  VIEW EXAMPLE
+</button>
+```
+
+Loads the default example configuration from `/public/default.json`.
+
+## Keyboard Shortcuts
+
+### Toggle GUI
+
+**Press `Tab` to show/hide the entire GUI:**
+
+```typescript Escenario.tsx
+useEffect(() => {
+  const h = (e: KeyboardEvent) => {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      setShowGui((s) => !s);
+    }
+  };
+  window.addEventListener("keydown", h);
+  return () => window.removeEventListener("keydown", h);
+}, []);
+```
+
+- **Tab**: Toggle GUI visibility
+- Useful for screenshots or presentations
+- Camera controls remain active
+
+<Tip>
+Hide the GUI with Tab for clean recordings or screenshots of your simulation.
+</Tip>
+
+## Performance Optimization
+
+### For Better Performance
+
+1. **Reduce deltaT**: Smaller steps = more calculations
+2. **Disable trails**: Trail rendering has some overhead
+3. **Use resultant forces**: Fewer arrows to render
+4. **Hide info panel**: Reduces real-time updates
+5. **Limit particle count**: &lt;50 particles for complex forces
+
+### For Better Accuracy
+
+1. **Decrease deltaT**: Use 0.001 for precise simulations
+2. **Enable trails**: Visualize path accuracy
+3. **Individual forces**: See force composition errors
+4. **Enable info panel**: Monitor numerical values
+
+## Common Workflows
+
+<AccordionGroup>
+
+<Accordion title="Quick experiment setup">
+1. Click **VIEW EXAMPLE** to clear and load base
+2. **RESET** to initial state
+3. Edit particle properties
+4. **START** to run
+5. **PAUSE** to inspect
+6. **RESET** to try again
+</Accordion>
+
+<Accordion title="Debugging motion issues">
+1. **PAUSE** the simulation
+2. Enable **Individual Forces** mode
+3. Enable **Info Panel**
+4. Enable **Axes** for reference
+5. **START** slowly (low deltaT)
+6. Watch force vectors and numerical values
+</Accordion>
+
+<Accordion title="Creating a demonstration">
+1. Build simulation with desired particles
+2. Test with **START/PAUSE/RESET**
+3. Adjust **deltaT** for smooth playback
+4. Configure **trails** and **force display**
+5. **SAVE** configuration
+6. Press **Tab** to hide GUI
+7. **LOAD** saved config before presenting
+8. **START** to demonstrate
+</Accordion>
+
+<Accordion title="Recording a video">
+1. Load or create simulation
+2. **RESET** to ensure clean start
+3. Adjust camera angle with mouse
+4. Enable/disable visual elements as needed
+5. Press **Tab** to hide GUI
+6. Start screen recording software
+7. Press **Tab** to show GUI briefly
+8. Click **START**
+9. Let simulation run
+10. Press **Tab** → **PAUSE** when done
+</Accordion>
+
+</AccordionGroup>
+
+## Interface Shortcuts Summary
+
+| Action | Method |
+|--------|--------|
+| **Toggle GUI** | Press `Tab` |
+| **Start/Pause** | Click START/PAUSE button |
+| **Reset** | Click RESET button |
+| **Edit particle** | Left-click in particle list |
+| **Focus camera** | Right-click particle in list |
+| **Reset camera** | Shift+click particle OR click Reset Camera |
+| **Delete particle** | Click X button in particle list |
+| **Rotate view** | Left mouse + drag |
+| **Pan view** | Right mouse + drag |
+| **Zoom** | Mouse wheel |
+| **Add particle** | Expand "New Particle" section |
+| **Toggle sections** | Click section headers |
+
+## Accessibility Features
+
+- **Clear labels**: All controls have descriptive labels
+- **Visual feedback**: Button colors indicate state
+- **Collapsible sections**: Reduce cognitive load
+- **Real-time values**: Sliders show current values
+- **State indicators**: ON/OFF shown explicitly
+
+## Best Practices
+
+1. **Start simple**: Begin with one particle and basic forces
+2. **Use reset frequently**: Quick way to retry experiments
+3. **Save often**: Preserve interesting configurations
+4. **Name particles**: Use colors to track different behaviors
+5. **Toggle trails**: Turn off for cleaner analysis, on for debugging paths
+6. **Adjust deltaT**: Match to your needs (accuracy vs speed)
+7. **Use camera focus**: Find lost particles quickly
+8. **Hide GUI**: Clean interface for recordings
+
+<Tip>
+Develop a workflow: **RESET** → Adjust → **START** → Observe → **PAUSE** → Analyze → **RESET** → Refine
+</Tip>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Particle Editor" icon="pen-to-square" href="/guides/particle-editor">
+    Learn to edit particles clicked in the list
+  </Card>
+  <Card title="Configuration" icon="floppy-disk" href="/guides/configuration">
+    Master save/load functionality
+  </Card>
+</CardGroup>

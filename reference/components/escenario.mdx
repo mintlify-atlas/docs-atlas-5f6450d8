@@ -1,0 +1,286 @@
+---
+title: Escenario Component
+description: Main simulation container and orchestrator
+---
+
+## Overview
+
+The `Escenario` component is the main container and orchestrator for the particle simulation. It manages all simulation state, coordinates the Three.js Canvas setup, and integrates all other components.
+
+**File**: `src/Particula/Escenario.tsx`
+
+## Key Responsibilities
+
+- Maintains simulation state (particles, controls, physics parameters)
+- Manages Three.js canvas and camera setup
+- Coordinates GUI, physics updates, and particle rendering
+- Handles particle CRUD operations
+- Manages configuration save/load functionality
+
+## State Management
+
+### UI State
+<ParamField path="showGui" type="boolean" default="true">
+  Controls visibility of the GUI panel
+</ParamField>
+
+<ParamField path="run" type="boolean" default="false">
+  Controls whether the simulation is running
+</ParamField>
+
+<ParamField path="showAxes" type="boolean" default="false">
+  Toggles coordinate axes visibility
+</ParamField>
+
+<ParamField path="showGrid" type="boolean" default="true">
+  Toggles grid visibility
+</ParamField>
+
+<ParamField path="showParticles" type="boolean" default="false">
+  Toggles particle sphere visibility
+</ParamField>
+
+<ParamField path="path" type="boolean" default="true">
+  Toggles particle trail rendering
+</ParamField>
+
+### Physics State
+
+<ParamField path="grav" type="boolean" default="true">
+  Enables/disables gravity (9.80665 m/s²)
+</ParamField>
+
+<ParamField path="friction" type="number" default="0.2">
+  Ground friction coefficient
+</ParamField>
+
+<ParamField path="dT" type="number" default="0.001">
+  Time step for physics integration (seconds)
+</ParamField>
+
+<ParamField path="particleRadius" type="number" default="0.15">
+  Radius of particle spheres when visible
+</ParamField>
+
+### Particle State
+
+<ParamField path="parts" type="PData[]">
+  Array of particle data objects
+</ParamField>
+
+<ParamField path="physicsRefs" type="Record<number, LiveData>">
+  Real-time physics data for each particle (position, velocity, acceleration)
+</ParamField>
+
+<ParamField path="meshRefs" type="Record<number, Mesh>">
+  Three.js mesh references for each particle
+</ParamField>
+
+## Key Functions
+
+### addParticle
+
+```typescript
+const addParticle = (x: number, y: number, z: number) => {
+  const id = Date.now();
+  const randomColor = `#${Math.floor(Math.random() * 16777215)
+    .toString(16)
+    .padStart(6, "0")}`;
+  const nueva: PData = {
+    id,
+    p0_fis: [x, y, z],
+    v0_fis: [0, 0, 0],
+    a0_fis: [0, 0, 0],
+    // ... other fields
+  };
+  physicsRefs.current[id] = {
+    pos: [x, y, z],
+    vel: [0, 0, 0],
+    acc: [0, 0, 0],
+    t: 0,
+    trail: [[y, z, x]],
+    frameCount: 0,
+  };
+  setParts([...parts, nueva]);
+};
+```
+
+Creates a new particle at the specified coordinates with:
+- Unique ID based on timestamp
+- Random color
+- Zero initial velocity
+- Initialized physics refs
+
+### handleReset
+
+```typescript
+const handleReset = () => {
+  setRun(false);
+  parts.forEach((p) => {
+    physicsRefs.current[p.id] = {
+      pos: [...p.p0_fis],
+      vel: [...p.v0_fis],
+      acc: [0, 0, 0],
+      t: 0,
+      trail: [[p.p0_fis[1], p.p0_fis[2], p.p0_fis[0]]],
+      frameCount: 0,
+    };
+    if (meshRefs.current[p.id])
+      meshRefs.current[p.id].position.set(
+        p.p0_fis[1],
+        p.p0_fis[2],
+        p.p0_fis[0]
+      );
+  });
+  // Reset particle state...
+};
+```
+
+Resets simulation to initial conditions:
+- Stops simulation
+- Restores initial positions and velocities
+- Clears particle trails
+- Resets event triggers
+
+### updateParticle
+
+```typescript
+const updateParticle = (id: number, data: any) => {
+  setParts((prev) =>
+    prev.map((p) => {
+      if (p.id === id) {
+        const updated = { ...p, ...data, t: 0, enSuelo: false };
+        physicsRefs.current[id] = {
+          pos: updated.p0_fis,
+          vel: updated.v0_fis,
+          acc: [0, 0, 0],
+          t: 0,
+          trail: [[updated.p0_fis[1], updated.p0_fis[2], updated.p0_fis[0]]],
+          frameCount: 0,
+        };
+        return updated;
+      }
+      return p;
+    })
+  );
+};
+```
+
+Updates a particle's properties and resets its physics state.
+
+### handleLoadConfig
+
+```typescript
+const handleLoadConfig = (config: any) => {
+  // Apply global settings
+  if (config.settings) {
+    setGrav(config.settings.gravity ?? true);
+    setFriction(config.settings.friction ?? 0.2);
+    setDT(config.settings.deltaT ?? 0.01);
+    setPath(config.settings.path ?? true);
+    setShowAxes(config.settings.axes ?? true);
+  }
+
+  // Load particles
+  if (config.particulas && Array.isArray(config.particulas)) {
+    const nuevasParticulas = config.particulas.map((p: any) => {
+      const newId = Date.now() + Math.random() * 1000;
+      // Initialize particle and physics refs...
+    });
+    setParts(nuevasParticulas);
+  }
+
+  setRun(false);
+};
+```
+
+Loads a complete simulation configuration from JSON.
+
+## Canvas Setup
+
+```tsx
+<Canvas camera={{ position: [50, 50, 50], far: 10000 }}>
+  <color attach="background" args={["#050505"]} />
+  <ambientLight intensity={0.5} />
+  <pointLight position={[15, 15, 15]} intensity={1.5} />
+
+  <SmoothCameraFocus
+    target={focusTarget}
+    resetTick={resetCamTick}
+    defaultCamPos={[50, 50, 50]}
+  />
+  
+  {showGrid && <primitive object={new GridHelper(2000, 100)} />}
+  {showAxes && <Axes />}
+
+  <PhysicsUpdate
+    parts={parts}
+    physicsRefs={physicsRefs}
+    meshRefs={meshRefs}
+    run={run}
+    dT={dT}
+    grav={grav}
+    friction={friction}
+    onPause={() => setRun(false)}
+    onUpdateParticle={updateParticleFromEvent}
+    onEventTriggered={handleEventTriggered}
+  />
+
+  {parts.map((p) => (
+    <ParticleGroup
+      key={p.id}
+      p={p}
+      path={path}
+      physicsRefs={physicsRefs}
+      meshRefs={meshRefs}
+      run={run}
+      forceMode={forceMode}
+      gravity={grav}
+      friction={friction}
+      showInfo={showInfo}
+      showParticles={showParticles}
+      particleRadius={particleRadius}
+    />
+  ))}
+  
+  <OrbitControls makeDefault />
+</Canvas>
+```
+
+## Keyboard Controls
+
+The component listens for keyboard events:
+
+- **Tab**: Toggle GUI visibility
+
+```typescript
+useEffect(() => {
+  const h = (e: KeyboardEvent) => {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      setShowGui((s) => !s);
+    }
+  };
+  window.addEventListener("keydown", h);
+  return () => window.removeEventListener("keydown", h);
+}, []);
+```
+
+## Component Integration
+
+The Escenario component integrates:
+
+- **GUI**: User interface controls (src/gui/GUI.tsx)
+- **PhysicsUpdate**: Physics simulation loop (src/Utils/PhysicsUpdate.tsx)
+- **ParticleGroup**: Particle rendering with trails and forces (src/Utils/ParticleGroup.tsx)
+- **SmoothCameraFocus**: Camera animation controls (src/Utils/SmoothCameraFocus.tsx)
+- **Axes**: Coordinate axes visualization (src/Utils/Axes.tsx)
+
+## Coordinate System Note
+
+The physics system uses standard coordinates (x, y, z), but Three.js renders them as:
+- Physics X → Three.js Y
+- Physics Y → Three.js Z
+- Physics Z → Three.js X
+
+This mapping is handled throughout the component when converting between physics and rendering coordinates.

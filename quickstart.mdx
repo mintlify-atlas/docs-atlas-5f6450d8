@@ -1,80 +1,244 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Get your first particle simulation running in minutes
 ---
 
-## Get started in three steps
+## Get Started in Minutes
 
-Get your documentation site running locally and make your first customization.
+This guide will walk you through creating your first particle simulation. You'll learn how to create a particle, apply forces, and observe the resulting motion.
 
-### Step 1: Set up your local environment
+<Tip>
+  No installation required! Use the [live demo](https://particle-simulator-psy.netlify.app/) to follow along directly in your browser.
+</Tip>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+## Your First Simulation
+
+<Steps>
+  <Step title="Access the Simulator">
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    Open the live demo in your browser:
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    ```bash
+    https://particle-simulator-psy.netlify.app/
+    ```
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    Or clone and run locally (see [Installation](/installation)):
+    
+    ```bash
+    git clone https://github.com/yourusername/particle-simulator.git
+    cd particle-simulator
+    npm install
+    npm run dev
+    ```
+    
+    You'll see a 3D view with a control panel on the right side.
+  </Step>
+  
+  <Step title="Create Your First Particle">
+    
+    In the **SIMULATOR** panel on the right:
+    
+    1. Expand the **"New Particle"** section
+    2. Enter initial position coordinates:
+       - X: `10`
+       - Y: `10`
+       - Z: `0`
+    3. Click the **"+ ADD PARTICLE"** button
+    
+    <Note>
+      A new particle will appear in the 3D view at position (10, 10, 0). The particle list will show your new particle as "P-001".
+    </Note>
+  </Step>
+  
+  <Step title="Configure the Particle">
+    
+    Click on the particle "P-001" in the **Particles** list to open the **PHYSICS EDITOR** panel on the left.
+    
+    You'll see several configuration options:
+    
+    - **Calculation Mode**: Toggle between Kinematics and Dynamics
+    - **Initial Position**: Current position (X, Y, Z)
+    - **Mass**: Particle mass in kg (default: 1)
+    - **Forces**: Mathematical expressions for forces
+    - **Initial Velocity**: Starting velocity vector
+    
+    <Tip>
+      Leave the mode on "MODE: DYNAMICS (FORCES)" for this tutorial. We'll use force-based physics.
+    </Tip>
+  </Step>
+  
+  <Step title="Add a Simple Harmonic Force">
+    
+    In the PHYSICS EDITOR:
+    
+    1. Scroll to the **"Forces F(t, x, y, z) (N)"** section
+    2. Click **"+ ADD FORCE"**
+    3. You'll see three input fields for Fx, Fy, and Fz
+    4. Enter the following force components:
+       
+       ```text
+       Fx: -x
+       Fy: -y
+       Fz: 0
+       ```
+    
+    <Note>
+      This creates a restoring force that pulls the particle toward the origin - a classic harmonic oscillator!
+    </Note>
+    
+    ### Understanding the Force Formula
+    
+    - `Fx = -x`: Force in X direction proportional to X position (pulls back to center)
+    - `Fy = -y`: Force in Y direction proportional to Y position (pulls back to center)  
+    - `Fz = 0`: No force in Z direction
+    
+    The negative signs mean the force always points toward the origin.
+  </Step>
+  
+  <Step title="Start the Simulation">
+    
+    1. Click **"CLOSE"** to exit the particle editor
+    2. In the main control panel, expand the **"Controls"** section
+    3. Click the **"START"** button
+    
+    <Note>
+      Watch your particle oscillate! It will move in circular or elliptical paths around the origin, demonstrating simple harmonic motion.
+    </Note>
+    
+    ### Controls During Simulation
+    
+    - **PAUSE**: Stop the simulation at any time
+    - **RESET**: Return particles to initial positions and velocities
+    - **Camera**: Click and drag to rotate, scroll to zoom, right-click to pan
+  </Step>
+  
+  <Step title="Experiment with Different Forces">
+    
+    Try modifying the forces to see different behaviors:
+    
+    ### Damped Oscillation
+    ```text
+    Fx: -x * 0.5
+    Fy: -y * 0.5
+    Fz: 0
+    ```
+    
+    ### Pulsing Vortex
+    ```text
+    Fx: -x * abs(cos(t*0.2))
+    Fy: -y * abs(cos(t*0.2))
+    Fz: 0
+    ```
+    
+    ### Hyperbolic Motion
+    ```text
+    Fx: -x
+    Fy: -2.25 * y
+    Fz: sin(t * 0.5) * 5
+    ```
+    
+    <Tip>
+      Click **PAUSE**, edit the particle, update forces, and click **START** again to see the new behavior.
+    </Tip>
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Available Variables and Functions
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+When writing force formulas, you have access to:
 
-### Step 3: Go live
+### Variables
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+| Variable | Description |
+|----------|-------------|
+| `t` | Elapsed time in seconds |
+| `x`, `y`, `z` | Current particle position on each axis |
 
-## Next steps
+### Mathematical Functions
 
-Now that you have your docs running, explore these key features:
+| Category | Functions | Example |
+|----------|-----------|----------|
+| **Trigonometry** | `sin(n)`, `cos(n)`, `tan(n)`, `atan2(y, x)` | `10 * sin(t)` |
+| **Hyperbolic** | `sinh(n)`, `cosh(n)`, `tanh(n)` | `20 * tanh(sin(t))` |
+| **Logs & Power** | `sqrt(n)`, `log(n)`, `log10(n)`, `^` or `**` | `log(t + 1)` |
+| **Utility** | `abs(n)`, `floor(n)`, `ceil(n)`, `round(n)` | `abs(x)` |
+| **Advanced** | `min(a, b)`, `max(a, b)`, `random()`, `sign(n)` | `max(x, y)` |
+
+### Mathematical Constants
+
+| Constant | Value (Approx) |
+|----------|---------------|
+| `PI` | 3.14159 |
+| `E` | 2.718 |
+| `SQRT2` | 1.414 |
+
+## Visualization Options
+
+Enhance your simulation with these visualization features:
+
+### Environment Settings
+
+In the **Environment** section:
+
+- **Gravity**: Toggle global downward gravitational acceleration
+- **Trail**: Show particle motion paths
+- **Axes**: Display X, Y, Z coordinate axes
+- **Grid**: Show the ground plane grid
+- **Particles**: Toggle particle visibility
+- **Particle Size**: Adjust visual size of particles (0.1 - 3.0)
+
+### Force Display Modes
+
+Click the **Forces Display** button to cycle through:
+
+1. **Forces: OFF** - No force vectors shown
+2. **Forces: RESULTANT** - Show net force vector
+3. **Forces: INDIVIDUAL** - Show each force component separately
+
+### Physics Parameters
+
+- **Ground Friction**: Damping coefficient when particles touch ground (0.0 - 2.0)
+- **Delta T**: Time step for simulation (0.001 - 0.1)
+  - Smaller values = more accurate but slower
+  - Larger values = faster but less accurate
+
+## Load the Example Configuration
+
+Want to see a spectacular pre-built simulation?
+
+1. Click the **"VIEW EXAMPLE"** button in the control panel
+2. Click **"START"** to watch 20 particles in a synchronized vortex pattern
+
+The example demonstrates:
+- Multiple particles with coordinated initial conditions
+- Complex force expressions: `-x * abs(cos(t*0.2))` (pulsing vortex)
+- Hyperbolic vertical motion: `-z * 0.5 + 20 * tanh(sin(t))`
+- Phase-shifted behavior for visual appeal
+
+## Next Steps
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Installation Guide" icon="download" href="/installation">
+    Set up the development environment on your local machine
+  </Card>
+  
+  <Card title="Configuration Reference" icon="gear" href="/guides/configuration">
+    Learn about all particle properties and simulation settings
+  </Card>
+  
+  <Card title="Trajectory Examples" icon="flask" href="/physics/trajectory-examples">
+    Explore more complex simulations and patterns
+  </Card>
+  
+  <Card title="Data Structures" icon="code" href="/reference/particle-data">
+    Dive into the technical details and data structures
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+<Warning>
+  If your simulation runs slowly or particles behave erratically, try:
+  - Reducing the number of particles
+  - Decreasing Delta T for better accuracy
+  - Simplifying force expressions
+  - Disabling trails and force visualizations
+</Warning>

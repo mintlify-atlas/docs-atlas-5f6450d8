@@ -1,0 +1,469 @@
+---
+title: Gravity and Friction
+description: How gravity, ground collision, and friction forces are implemented
+---
+
+The Particle Simulator includes realistic implementations of gravity, ground collision detection, normal forces, and both static and kinetic friction. These features allow you to simulate a wide variety of real-world scenarios.
+
+## Gravity
+
+### Gravity Constant
+
+The simulator uses the standard Earth surface gravity:
+
+```typescript
+// From PhysicsUpdate.tsx line 101
+const g_val = grav ? 9.80665 : 0;
+//                   ^^^^^^^^ standard gravity in m/s²
+```
+
+When gravity is enabled in the GUI, all particles experience a constant downward acceleration of **9.80665 m/s²** in the -Z direction (physics coordinates).
+
+<Note>
+This is the [standard gravity](https://en.wikipedia.org/wiki/Standard_gravity) value defined as the nominal acceleration due to Earth's gravity at sea level.
+</Note>
+
+### Application in Different Modes
+
+#### Kinematic Mode (isMassless = true)
+
+Gravity is applied directly to the kinematic equations:
+
+```tsx
+// From PhysicsUpdate.tsx lines 119-123
+const nz = p.p0_fis[2] + 
+  evaluarFormula(p.fz, nt, live.pos[0], live.pos[1], live.pos[2]) + 
+  p.v0_fis[2] * nt - 
+  0.5 * g_val * Math.pow(nt, 2);
+  //    ^^^^^^^^^^^^^^^^^^^^^^^
+  //    Classic kinematic equation: Δz = v₀t - ½gt²
+```
+
+This produces the standard parabolic trajectory for projectile motion.
+
+#### Dynamic Mode (isMassless = false)
+
+Gravity contributes to the acceleration via Newton's second law:
+
+```tsx
+// From PhysicsUpdate.tsx lines 177-251
+const m = p.mass || 0.001;
+const peso = m * g_val; // Weight force = mg
+
+// Gravity contributes to Z-acceleration
+accNew = [
+  fuerzaResultanteX / m,
+  fuerzaResultanteY / m,
+  fuerzaResultanteZ / m - g_val,  // a_z = F_z/m - g
+];
+```
+
+The weight force `peso` is also used to calculate the normal force when the particle is on the ground.
+
+## Ground Collision Detection
+
+### Detection
+
+The ground is defined as the plane **z = 0** in physics coordinates. A particle is considered "on the ground" if:
+
+```tsx
+// From PhysicsUpdate.tsx line 181
+const enSuelo = posFinal[2] <= 0;
+//                        ^
+//                        Physics Z-coordinate
+```
+
+Any particle with z ≤ 0 is touching or below the ground plane.
+
+### Position Correction
+
+When a particle reaches the ground, its position is clamped to prevent it from falling through:
+
+```tsx
+// From PhysicsUpdate.tsx lines 188-189
+if (enSuelo) {
+  posFinal[2] = 0;  // Clamp to ground level
+  // ...
+}
+```
+
+This is a hard constraint—particles cannot have z < 0.
+
+### Velocity Correction
+
+Vertical velocity is also constrained to prevent bouncing (inelastic collision):
+
+```tsx
+// From PhysicsUpdate.tsx lines 289-293
+if (posFinal[2] <= 0) {
+  posFinal[2] = 0;
+  if (velFinal[2] < 0) velFinal[2] = 0;  // No downward velocity
+}
+```
+
+When a particle hits the ground, any downward velocity component is set to zero. This simulates a **perfectly inelastic collision** (no bounce).
+
+<Note>
+Currently, the simulator does not support elastic collisions or bouncing. All ground collisions are perfectly inelastic.
+</Note>
+
+## Normal Force
+
+### Calculation
+
+The normal force is the ground's reaction force that prevents the particle from falling through. It only exists when the particle is on the ground **and** being pushed down.
+
+```tsx
+// From PhysicsUpdate.tsx lines 179-195
+const enSuelo = posFinal[2] <= 0;
+let normal = 0;
+
+if (enSuelo) {
+  // Normal = |min(0, ΣFz - peso)|
+  // If ΣFz - peso < 0 → force pressing against ground → normal exists
+  // If ΣFz - peso >= 0 → object being lifted → no normal
+  const fuerzaNetoZ = sumF[2] - peso;
+  normal = Math.abs(Math.min(0, fuerzaNetoZ));
+}
+```
+
+### Physical Interpretation
+
+The normal force calculation accounts for:
+
+1. **Weight** (peso = mg): Always pushes down when gravity is enabled
+2. **Applied forces** (sumF[2]): Can push down or pull up
+3. **Net force** (fuerzaNetoZ = sumF[2] - peso):
+   - If negative: particle is being pressed into the ground → normal force exists
+   - If positive: particle is being lifted → no normal force (would leave ground)
+
+**Examples:**
+
+```typescript
+// Example 1: Resting on ground with no applied forces
+sumF[2] = 0
+peso = 10 N
+fuerzaNetoZ = 0 - 10 = -10 N
+normal = |-10| = 10 N  // Normal balances weight
+
+// Example 2: Being pushed down by additional force
+sumF[2] = -5 N  // 5 N downward force applied
+peso = 10 N
+fuerzaNetoZ = -5 - 10 = -15 N
+normal = |-15| = 15 N  // Normal balances weight + applied force
+
+// Example 3: Being pulled up
+sumF[2] = +15 N  // 15 N upward force applied
+peso = 10 N
+fuerzaNetoZ = +15 - 10 = +5 N
+normal = |0| = 0 N  // No normal force, particle lifts off ground
+```
+
+## Friction Forces
+
+### Friction Coefficient
+
+The simulator uses a single friction coefficient μ (mu) for both static and kinetic friction:
+
+```tsx
+// From Escenario.tsx line 31
+const [friction, setFriction] = useState(0.2);
+//                                       ^^^^ default μ = 0.2
+```
+
+Typical values:
+- **0.0**: No friction (ice)
+- **0.2**: Low friction (default)
+- **0.5**: Moderate friction (wood on wood)
+- **1.0**: High friction (rubber on concrete)
+
+### Friction Calculation
+
+Friction is only calculated when the particle is on the ground with normal force:
+
+```tsx
+// From PhysicsUpdate.tsx lines 197-239
+if (enSuelo) {
+  if (normal > 0 && friction > 0) {
+    // Maximum friction force = μ * N
+    const friccionMax = friction * normal;
+    
+    // Determine if object is moving or at rest
+    const vx = live.vel[0];
+    const vy = live.vel[1];
+    const vHor = Math.hypot(vx, vy);  // Horizontal velocity magnitude
+    
+    if (vHor > 1e-9) {
+      // KINETIC FRICTION: Object is moving
+      // ...
+    } else if (fuerzaHorizontal > 1e-9) {
+      // STATIC FRICTION: Object at rest with applied force
+      // ...
+    }
+  }
+}
+```
+
+### Kinetic Friction (Moving Object)
+
+When the particle is moving (`vHor > 1e-9`), kinetic friction opposes the velocity:
+
+```tsx
+// From PhysicsUpdate.tsx lines 210-224
+if (vHor > 1e-9) {
+  // Object is moving: kinetic friction
+  // Friction opposes velocity
+  const dirX = vx / vHor; // Unit direction of velocity in X
+  const dirY = vy / vHor; // Unit direction of velocity in Y
+  
+  // If max friction > applied force + momentum,
+  // friction equals force (object decelerates to stop)
+  // Otherwise use max friction
+  const friccionAplicada = Math.min(
+    friccionMax, 
+    fuerzaHorizontal + m * vHor / dT
+  );
+  
+  // Decompose friction into X and Y (opposite to velocity)
+  friccionX = -dirX * friccionAplicada;
+  friccionY = -dirY * friccionAplicada;
+}
+```
+
+**Key points:**
+- Direction: **Opposite to velocity** direction
+- Magnitude: Up to `μ * N` (Coulomb friction)
+- Effect: Decelerates the particle until it stops
+
+### Static Friction (Stationary Object)
+
+When the particle is at rest (`vHor < 1e-9`) but has forces applied, static friction prevents motion:
+
+```tsx
+// From PhysicsUpdate.tsx lines 225-238  
+else if (fuerzaHorizontal > 1e-9) {
+  // Object at rest but forces applied: static friction
+  // Friction opposes applied force
+  const dirFx = sumF[0] / fuerzaHorizontal;
+  const dirFy = sumF[1] / fuerzaHorizontal;
+  
+  // If max friction > applied force,
+  // friction cancels force completely (no movement)
+  // Otherwise use max friction
+  const friccionAplicada = Math.min(friccionMax, fuerzaHorizontal);
+  
+  friccionX = -dirFx * friccionAplicada;
+  friccionY = -dirFy * friccionAplicada;
+}
+```
+
+**Key points:**
+- Direction: **Opposite to applied force** direction
+- Magnitude: Up to `μ * N`, but **exactly matches applied force** if possible
+- Effect: Prevents motion until applied force exceeds `μ * N`
+
+### Friction Application
+
+Friction forces are added to the net force before calculating acceleration:
+
+```tsx
+// From PhysicsUpdate.tsx lines 242-252
+// Resultant force = Applied forces + Friction
+const fuerzaResultanteX = sumF[0] + friccionX;
+const fuerzaResultanteY = sumF[1] + friccionY;
+const fuerzaResultanteZ = sumF[2];
+
+// New acceleration a(t+dt)  
+accNew = [
+  fuerzaResultanteX / m,
+  fuerzaResultanteY / m,
+  fuerzaResultanteZ / m - g_val,
+];
+```
+
+## Complete Example: Sliding Block
+
+Let's trace through what happens when a block slides on a surface with friction:
+
+```typescript
+// Initial conditions
+mass = 2 kg
+velocity = [5, 0, 0] m/s  // Moving right at 5 m/s
+position = [0, 0, 0]      // On the ground
+friction = 0.3            // μ = 0.3
+gravity = 9.80665 m/s²
+
+// Frame 1:
+// ---------
+// Ground detection
+enSuelo = (0 <= 0) = true  ✓
+
+// Normal force
+peso = 2 * 9.80665 = 19.613 N
+sumF = [0, 0, 0]  // No applied forces
+fuerzaNetoZ = 0 - 19.613 = -19.613 N
+normal = |-19.613| = 19.613 N
+
+// Friction (kinetic, since moving)
+friccionMax = 0.3 * 19.613 = 5.884 N
+vHor = 5 m/s > 1e-9  ✓ kinetic friction
+dirX = 5 / 5 = 1  (moving right)
+friccionAplicada = 5.884 N
+friccionX = -1 * 5.884 = -5.884 N  (opposes motion)
+
+// Acceleration
+accNew[0] = -5.884 / 2 = -2.942 m/s²
+
+// Velocity update (assuming dt = 0.01 s)
+velFinal[0] = 5 + (-2.942) * 0.01 = 4.97 m/s
+
+// The particle is slowing down due to friction
+```
+
+After several frames, the velocity decreases until:
+
+```typescript
+// Eventually:
+vHor < 1e-9  // Very small velocity
+// Particle stops, friction transitions to static
+```
+
+## Velocity Clamping
+
+To prevent numerical jitter when particles nearly stop:
+
+```tsx
+// From PhysicsUpdate.tsx lines 270-286
+if (enSuelo && normal > 0) {
+  const vHorFinal = Math.hypot(velFinal[0], velFinal[1]);
+  const fuerzaHorizontalNeta = Math.hypot(
+    fuerzaResultanteX, 
+    fuerzaResultanteY
+  );
+  
+  // If velocity is tiny and net force is tiny, stop completely
+  if (vHorFinal < 1e-6 && fuerzaHorizontalNeta < 1e-6) {
+    velFinal[0] = 0;
+    velFinal[1] = 0;
+  }
+  
+  // Vertical velocity cannot be negative on ground
+  if (velFinal[2] < 0) {
+    velFinal[2] = 0;
+  }
+}
+```
+
+This prevents particles from perpetually having velocities like `1e-9 m/s` that don't affect motion but cause unnecessary calculations.
+
+## Real-World Examples
+
+### Example 1: Free Fall
+
+**Setup:**
+- Mass: 1 kg
+- Initial position: [0, 0, 10] (10 m above ground)
+- Initial velocity: [0, 0, 0]
+- Gravity: ON
+- Friction: 0 (no air resistance)
+
+**Result:**
+- Accelerates downward at 9.80665 m/s²
+- Reaches ground in t = √(2h/g) = √(20/9.81) ≈ 1.43 seconds
+- Final velocity: v = gt ≈ 14 m/s
+- Velocity becomes 0 upon ground contact (inelastic collision)
+
+### Example 2: Projectile with No Friction
+
+**Setup:**
+- Mass: 0.5 kg
+- Initial position: [0, 0, 0]
+- Initial velocity: [10, 0, 10] (10 m/s right and up)
+- Gravity: ON
+- Friction: 0
+
+**Result:**
+- Horizontal velocity remains constant: vx = 10 m/s
+- Vertical motion: vz = 10 - 9.81t
+- Reaches max height: h = v²/(2g) ≈ 5.1 m at t ≈ 1.02 s
+- Total flight time: ≈ 2.04 s
+- Horizontal distance: 10 * 2.04 ≈ 20.4 m
+
+### Example 3: Sliding with Friction
+
+**Setup:**
+- Mass: 2 kg
+- Initial position: [0, 0, 0] (on ground)
+- Initial velocity: [5, 0, 0] (5 m/s right)
+- Gravity: ON
+- Friction: 0.3
+
+**Result:**
+- Normal force: N = mg = 19.613 N
+- Friction force: F_f = μN = 5.884 N
+- Deceleration: a = -F_f/m = -2.942 m/s²
+- Stopping distance: d = v²/(2a) = 25/(2*2.942) ≈ 4.25 m
+- Stopping time: t = v/a = 5/2.942 ≈ 1.7 s
+
+### Example 4: Pushing a Heavy Object
+
+**Setup:**
+- Mass: 10 kg
+- Initial position: [0, 0, 0] (on ground)
+- Initial velocity: [0, 0, 0] (at rest)
+- Applied force: [20, 0, 0] N (pushing right)
+- Gravity: ON
+- Friction: 0.5
+
+**Result:**
+- Weight: 98.07 N
+- Normal force: 98.07 N
+- Max static friction: 0.5 * 98.07 = 49.03 N
+- Applied force (20 N) < max friction (49.03 N)
+- **Object doesn't move!** Static friction = 20 N (exactly cancels applied force)
+
+To move it, you'd need to apply > 49.03 N.
+
+## Disabling Features
+
+### Disable Gravity
+
+Uncheck "Gravity" in the GUI. This sets `g_val = 0`, removing all gravitational effects. Useful for:
+- Space simulations
+- Horizontal-only motion
+- Isolated force demonstrations
+
+### Disable Friction
+
+Set friction slider to 0. This sets `friction = 0`, removing all friction forces. Useful for:
+- Ideal physics demonstrations
+- Frictionless surfaces
+- Conservative energy systems
+
+<Warning>
+With both gravity and friction disabled, particles will move with **constant velocity** unless acted upon by applied forces. This matches Newton's first law perfectly.
+</Warning>
+
+## Limitations
+
+### No Elastic Collisions
+
+All ground collisions are perfectly inelastic (no bounce). The coefficient of restitution is effectively 0.
+
+### No Air Resistance
+
+The simulator doesn't include drag forces proportional to velocity. You can simulate air resistance by adding a force formula like `-0.1*vx` but it won't automatically adjust with velocity magnitude.
+
+### Single Friction Coefficient
+
+Static and kinetic friction use the same coefficient μ. In reality, static friction is usually slightly higher than kinetic friction.
+
+### 2D Ground
+
+The ground is an infinite flat plane at z = 0. No terrain, slopes, or elevation changes.
+
+## Further Reading
+
+- [Normal Force (Wikipedia)](https://en.wikipedia.org/wiki/Normal_force)
+- [Friction (Wikipedia)](https://en.wikipedia.org/wiki/Friction)
+- [Coulomb Friction](https://en.wikipedia.org/wiki/Friction#Coulomb_friction)

@@ -1,0 +1,332 @@
+---
+title: 'Force Equations'
+description: 'Learn how to write force formulas in Particle Simulator'
+icon: 'function'
+---
+
+## Overview
+
+Forces in Particle Simulator are defined as mathematical functions that can depend on **time** (`t`) and **position** (`x`, `y`, `z`). The system evaluates these formulas in real-time to compute the acceleration and trajectory of each particle.
+
+## Force as a Function: F(t, x, y, z)
+
+Every force component can be written as a mathematical expression using:
+
+- **`t`** - Elapsed time in seconds
+- **`x`, `y`, `z`** - Current position of the particle
+- Any mathematical function from the [available functions](/physics/available-functions) library
+
+### Vector Force Format
+
+Forces are always specified as three components:
+
+```javascript
+[Fx, Fy, Fz]
+```
+
+Each component is a string containing a mathematical formula:
+
+<CodeGroup>
+```javascript Example: Spring Force
+{
+  "vec": ["-x", "-y", "-z"]
+}
+```
+
+```javascript Example: Damped Oscillation
+{
+  "vec": [
+    "-x * abs(cos(t*0.2))",
+    "-y * abs(cos(t*0.2))",
+    "-z * 0.5 + 20 * tanh(sin(t))"
+  ]
+}
+```
+</CodeGroup>
+
+## Time-Dependent Forces
+
+Forces that change over time use the `t` variable:
+
+<CodeGroup>
+```javascript Sinusoidal Force
+{
+  "vec": [
+    "0",
+    "0",
+    "sin(t * 0.5) * 5"
+  ]
+}
+// Oscillating force in Z direction
+```
+
+```javascript Hyperbolic Growth
+{
+  "vec": [
+    "0",
+    "0",
+    "20 * tanh(sin(t))"
+  ]
+}
+// Bounded oscillation using hyperbolic tangent
+```
+
+```javascript Pulsing Force
+{
+  "vec": [
+    "abs(cos(t*0.2)) * 10",
+    "abs(sin(t*0.2)) * 10",
+    "0"
+  ]
+}
+// Pulsing circular force pattern
+```
+</CodeGroup>
+
+## Position-Dependent Forces
+
+Forces that depend on the particle's current position:
+
+### Spring/Restoring Forces
+
+<CodeGroup>
+```javascript Simple Spring
+{
+  "vec": ["-x", "-y", "-z"]
+}
+// Hooke's law: F = -kx (k=1)
+// Always points toward origin
+```
+
+```javascript Anisotropic Spring
+{
+  "vec": [
+    "-x",
+    "-2.25 * y",
+    "-z"
+  ]
+}
+// Different spring constants for each axis
+// Creates Lissajous patterns
+```
+</CodeGroup>
+
+### Inverse-Square Gravity
+
+```javascript Central Force
+{
+  "vec": [
+    "-x / (sqrt(x^2 + y^2 + z^2)^3)",
+    "-y / (sqrt(x^2 + y^2 + z^2)^3)",
+    "-z / (sqrt(x^2 + y^2 + z^2)^3)"
+  ]
+}
+```
+
+This creates a gravitational force:
+- Magnitude: `1/r²`
+- Direction: Always toward origin
+- Note: The `r³` denominator comes from normalizing the direction vector
+
+## Combined Forces
+
+You can combine time and position dependencies:
+
+<CodeGroup>
+```javascript Time-Modulated Spring
+{
+  "vec": [
+    "-x * abs(cos(t*0.2))",
+    "-y * abs(cos(t*0.2))",
+    "-z * 0.5"
+  ]
+}
+// Spring constant pulses with time
+// Creates expanding/contracting motion
+```
+
+```javascript Damped with External Drive
+{
+  "vec": [
+    "-x * 0.5",
+    "-y * 0.5",
+    "-z * 0.5 + 20 * tanh(sin(t))"
+  ]
+}
+// XY: damped spring
+// Z: damping + time-varying external force
+```
+</CodeGroup>
+
+## Force Evaluation Modes
+
+The simulator supports two calculation modes:
+
+<Tabs>
+  <Tab title="Dynamic Mode (Forces)">
+    ### Dynamic Mode: F = ma
+    
+    Forces are evaluated and Newton's second law is applied:
+    
+    ```typescript
+    // From Movimiento.ts evaluarFormula function
+    const Fx = evaluarFormula(force.vec[0], t, x, y, z);
+    const Fy = evaluarFormula(force.vec[1], t, x, y, z);
+    const Fz = evaluarFormula(force.vec[2], t, x, y, z);
+    
+    // Acceleration: a = F/m
+    ax = Fx / mass;
+    ay = Fy / mass;
+    az = Fz / mass;
+    ```
+    
+    **When to use:**
+    - Realistic physics simulations
+    - When mass matters
+    - Multiple interacting forces
+    
+    **Example:**
+    ```javascript
+    {
+      "mass": 5,
+      "forces": [
+        {"id": 1, "vec": ["-x", "-y", "0"]},
+        {"id": 2, "vec": ["0", "0", "-9.8"]}
+      ]
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Kinematic Mode">
+    ### Kinematic Mode: x = f(t)
+    
+    Position is directly defined as a function of time. Forces are interpreted as position functions:
+    
+    ```typescript
+    // In kinematic mode (isMassless: true)
+    x = evaluarFormula(fx, t);
+    y = evaluarFormula(fy, t);
+    z = evaluarFormula(fz, t);
+    ```
+    
+    **When to use:**
+    - Parametric trajectories
+    - Decorative patterns
+    - When you know the exact path
+    
+    **Example:**
+    ```javascript
+    {
+      "isMassless": true,
+      "fx": "10 * cos(t)",
+      "fy": "10 * sin(t)",
+      "fz": "t * 2"
+    }
+    // Creates a helix
+    ```
+  </Tab>
+</Tabs>
+
+## Implementation Details
+
+The force evaluation uses function caching for performance:
+
+```typescript
+// From Movimiento.ts
+const formulaCache: Record<string, Function> = {};
+
+export const evaluarFormula = (
+  formula: string,
+  t: number,
+  x: number = 0,
+  y: number = 0,
+  z: number = 0
+): number => {
+  // Replace ^ with ** for exponentiation
+  const cleanedFormula = formula.replace(/\^/g, "**");
+  
+  // Create function with Math context injected
+  fn = new Function(
+    "t", "x", "y", "z", ...mathKeys,
+    `return ${cleanedFormula}`
+  );
+  
+  // Execute with current values
+  return fn(t, x, y, z, ...mathValues);
+};
+```
+
+### Key Features:
+
+<CardGroup cols={2}>
+  <Card title="Function Caching" icon="database">
+    Formulas are compiled once and cached to avoid repeated parsing
+  </Card>
+  
+  <Card title="Math Injection" icon="calculator">
+    All JavaScript `Math` functions are automatically available
+  </Card>
+  
+  <Card title="Power Operators" icon="superscript">
+    Both `^` and `**` work for exponentiation
+  </Card>
+  
+  <Card title="Error Handling" icon="shield-check">
+    Invalid formulas return 0 instead of crashing
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+### Oscillators
+
+```javascript
+// Simple Harmonic: F = -kx
+["-x", "-y", "-z"]
+
+// Damped: F = -kx - bv (approximated)
+["-x * 1.5", "-y * 1.5", "-z * 1.5"]
+
+// Driven: F = -kx + F₀sin(ωt)
+["-x", "-y", "-z + 10*sin(2*t)"]
+```
+
+### Central Forces
+
+```javascript
+// Attractive 1/r²
+[
+  "-x / (sqrt(x^2 + y^2 + z^2)^3)",
+  "-y / (sqrt(x^2 + y^2 + z^2)^3)",
+  "-z / (sqrt(x^2 + y^2 + z^2)^3)"
+]
+
+// Repulsive 1/r²
+[
+  "x / (sqrt(x^2 + y^2 + z^2)^3)",
+  "y / (sqrt(x^2 + y^2 + z^2)^3)",
+  "z / (sqrt(x^2 + y^2 + z^2)^3)"
+]
+```
+
+### Rotating Forces
+
+```javascript
+// Vortex (rotates around Z axis)
+[
+  "-y",  // Fy ∝ -y creates rotation
+  "x",   // Fx ∝ x creates rotation
+  "-z"   // Fz ∝ -z keeps Z bounded
+]
+
+// Pulsing Vortex
+[
+  "-y * abs(cos(t*0.2))",
+  "x * abs(cos(t*0.2))",
+  "-z"
+]
+```
+
+<Note>
+**Pro Tip:** Start with simple formulas and add complexity gradually. Use the [trajectory examples](/physics/trajectory-examples) as a starting point for your own creations.
+</Note>

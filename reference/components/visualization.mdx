@@ -1,0 +1,601 @@
+---
+title: Visualization Components
+description: Components for rendering visual elements in the simulation
+---
+
+## Overview
+
+The visualization components handle rendering of various visual elements in the simulation, including force vectors, coordinate axes, particle groups, trails, and camera controls.
+
+## ForceVisualizer
+
+**File**: `src/Utils/ForceVisualizer.tsx`
+
+Visualizes forces acting on particles as colored arrows.
+
+### Props
+
+```typescript
+interface ForceVisualizerProps {
+  p: PData;
+  liveData: LiveData;
+  forceMode: ForceDisplayMode; // 0=off, 1=resultant, 2=individual
+  gravity: boolean;
+  friction: number;
+}
+```
+
+<ParamField path="p" type="PData" required>
+  Particle data including forces, mass, and configuration
+</ParamField>
+
+<ParamField path="liveData" type="LiveData" required>
+  Real-time physics data (position, velocity, acceleration)
+</ParamField>
+
+<ParamField path="forceMode" type="ForceDisplayMode" required>
+  Display mode: 0=hidden, 1=resultant force only, 2=all individual forces
+</ParamField>
+
+<ParamField path="gravity" type="boolean" required>
+  Whether gravity is enabled in the simulation
+</ParamField>
+
+<ParamField path="friction" type="number" required>
+  Ground friction coefficient
+</ParamField>
+
+### Force Types and Colors
+
+```typescript
+const COLORS = {
+  resultant: 0xffff00,  // Yellow - resultant force
+  gravity: 0x00ff00,    // Green - gravity
+  friction: 0xff00ff,   // Magenta - friction
+  applied: 0x00ffff,    // Cyan - applied forces
+};
+```
+
+### Mode 1: Resultant Force
+
+Displays a single yellow arrow representing the sum of all forces:
+
+```typescript
+const resultant = {
+  fx: appliedForces.reduce((sum, f) => sum + f.fx, 0) + gravityForce.fx + frictionForce.fx,
+  fy: appliedForces.reduce((sum, f) => sum + f.fy, 0) + gravityForce.fy + frictionForce.fy,
+  fz: appliedForces.reduce((sum, f) => sum + f.fz, 0) + gravityForce.fz + frictionForce.fz,
+};
+```
+
+### Mode 2: Individual Forces
+
+Displays separate arrows for:
+- **Applied forces** (cyan): User-defined forces from formulas
+- **Gravity** (green): Weight force (m × g)
+- **Friction** (magenta): Ground friction force
+
+### Arrow Scaling
+
+```typescript
+const MAX_ARROW_LENGTH = 2;
+const SCALE_FACTOR = 0.1;
+
+const getArrowLength = (mag: number): number => {
+  return Math.min(mag * SCALE_FACTOR, MAX_ARROW_LENGTH);
+};
+```
+
+Arrows are scaled proportionally to force magnitude but capped at 2 units to prevent visual clutter.
+
+### Friction Calculation
+
+```typescript
+if (liveData.pos[2] <= 0.01 && friction > 0 && normalForce > 0) {
+  const vx = liveData.vel[0];
+  const vy = liveData.vel[1];
+  const vHor = Math.hypot(vx, vy);
+  const fricMag = friction * normalForce; // μ * N
+  
+  if (vHor > 1e-6) {
+    // Kinetic friction: opposes velocity
+    frictionForce = {
+      fx: -fricMag * (vx / vHor),
+      fy: -fricMag * (vy / vHor),
+      fz: 0,
+    };
+  } else {
+    // Static friction: opposes applied forces
+    // ...
+  }
+}
+```
+
+---
+
+## ForceArrow
+
+**File**: `src/Utils/ForceArrow.tsx`
+
+<Tip>This component is deprecated in favor of ForceVisualizer, which provides more comprehensive force visualization.</Tip>
+
+Renders a single force arrow for a given force definition.
+
+### Props
+
+```typescript
+interface ForceArrowProps {
+  f: ForceData;
+  liveData: LiveData;
+}
+
+interface ForceData {
+  id: number;
+  vec: [string, string, string]; // Formula strings for fx, fy, fz
+}
+```
+
+### Usage
+
+```typescript
+const fx = evaluarFormula(f.vec[0], liveData.t, liveData.pos[0], liveData.pos[1], liveData.pos[2]);
+const fy = evaluarFormula(f.vec[1], liveData.t, liveData.pos[0], liveData.pos[1], liveData.pos[2]);
+const fz = evaluarFormula(f.vec[2], liveData.t, liveData.pos[0], liveData.pos[1], liveData.pos[2]);
+
+const mag = Math.sqrt(fx ** 2 + fy ** 2 + fz ** 2);
+if (mag < 0.01) return null;
+
+return (
+  <primitive
+    object={new ArrowHelper(dir, origin, mag * 0.2, 0xffff00)}
+  />
+);
+```
+
+---
+
+## Axes
+
+**File**: `src/Utils/Axes.tsx`
+
+Renders coordinate axes to help visualize the 3D space.
+
+### Component
+
+```typescript
+const AXIS_LENGTH = 10000;
+
+const Axes: React.FC = () => {
+  return (
+    <group>
+      {/* X axis - Red (Three.js Y = Physics X) */}
+      <Line
+        points={[[-AXIS_LENGTH, 0, 0], [AXIS_LENGTH, 0, 0]]}
+        color="red"
+        lineWidth={1}
+      />
+
+      {/* Y axis - Green (Three.js Z = Physics Y) */}
+      <Line
+        points={[[0, -AXIS_LENGTH, 0], [0, AXIS_LENGTH, 0]]}
+        color="green"
+        lineWidth={1}
+      />
+
+      {/* Z axis - Blue (Three.js X = Physics Z) */}
+      <Line
+        points={[[0, 0, -AXIS_LENGTH], [0, 0, AXIS_LENGTH]]}
+        color="blue"
+        lineWidth={1}
+      />
+    </group>
+  );
+};
+```
+
+### Color Scheme
+
+- **Red**: X axis (physics) / Y axis (Three.js)
+- **Green**: Y axis (physics) / Z axis (Three.js)
+- **Blue**: Z axis (physics) / X axis (Three.js)
+
+---
+
+## ParticleGroup
+
+**File**: `src/Utils/ParticleGroup.tsx`
+
+Groups together all visual elements for a single particle: the particle mesh, trail, force visualization, and info display.
+
+### Props
+
+```typescript
+interface ParticleGroupProps {
+  p: PData;
+  path: boolean;
+  physicsRefs: MutableRefObject<Record<number, LiveData>>;
+  meshRefs: MutableRefObject<Record<number, Mesh>>;
+  run: boolean;
+  forceMode: ForceDisplayMode;
+  gravity: boolean;
+  friction: number;
+  showInfo: boolean;
+  showParticles: boolean;
+  particleRadius: number;
+}
+```
+
+### Component Structure
+
+```tsx
+<group ref={groupRef}>
+  {/* Particle mesh */}
+  <Particula
+    ref={(el) => {
+      if (el) meshRefs.current[p.id] = el;
+    }}
+    posicion={[liveData.pos[1], liveData.pos[2], liveData.pos[0]]}
+    color={p.color}
+    radius={showParticles ? particleRadius : 0.001}
+  />
+
+  {/* Trail */}
+  {path && liveData.trail.length > 1 && (
+    <Line
+      points={liveData.trail}
+      color={p.color}
+      lineWidth={1.5}
+      transparent
+      opacity={0.6}
+    />
+  )}
+
+  {/* Force visualization */}
+  <ForceVisualizer
+    p={p}
+    liveData={liveData}
+    forceMode={forceMode}
+    gravity={gravity}
+    friction={friction}
+  />
+
+  {/* Info display */}
+  <ParticleInfo
+    p={p}
+    liveData={liveData}
+    showInfo={showInfo}
+    gravity={gravity}
+    friction={friction}
+  />
+</group>
+```
+
+### Trail Rendering
+
+Trails are rendered using the `Line` component from `@react-three/drei`:
+
+```typescript
+{path && liveData.trail.length > 1 && (
+  <Line
+    points={liveData.trail}
+    color={p.color}
+    lineWidth={1.5}
+    transparent
+    opacity={0.6}
+  />
+)}
+```
+
+Trail properties:
+- **Color**: Matches particle color
+- **Width**: 1.5 pixels
+- **Opacity**: 60% transparent
+- **Max points**: 200 (see PhysicsUpdate.tsx:327-330)
+
+### Performance Optimization
+
+The component uses `useFrame` to force re-renders:
+
+```typescript
+const [, setTick] = useState(0);
+
+useFrame(() => {
+  setTick((t) => t + 1);
+});
+```
+
+This ensures the component stays synchronized with the physics updates while using ref-based mesh updates for optimal performance.
+
+---
+
+## ParticleInfo
+
+**File**: `src/Utils/ParticleInfo.tsx`
+
+<Note>
+This component currently returns `null`. Information display has been moved to the GUI's InfoPanel component instead of 3D labels.
+</Note>
+
+### Props
+
+```typescript
+interface ParticleInfoProps {
+  p: PData;
+  liveData: LiveData;
+  showInfo: boolean;
+  gravity: boolean;
+  friction: number;
+}
+```
+
+### Previous Functionality
+
+Previously displayed 3D text labels with particle information. Now replaced by the InfoPanel in the GUI for better readability.
+
+---
+
+## SmoothCameraFocus
+
+**File**: `src/Utils/SmoothCameraFocus.tsx`
+
+Handles smooth camera transitions when focusing on particles or resetting the view.
+
+### Props
+
+```typescript
+interface SmoothCameraFocusProps {
+  target: [number, number, number] | null;
+  resetTick: number;
+  defaultCamPos: [number, number, number];
+}
+```
+
+<ParamField path="target" type="[number, number, number] | null">
+  Target position to focus on, or null for no focus
+</ParamField>
+
+<ParamField path="resetTick" type="number">
+  Counter that increments when camera should reset to default position
+</ParamField>
+
+<ParamField path="defaultCamPos" type="[number, number, number]">
+  Default camera position (typically [50, 50, 50])
+</ParamField>
+
+### Animation State
+
+```typescript
+interface AnimationState {
+  startPos: Vector3;
+  startTarget: Vector3;
+  endPos: Vector3;
+  endTarget: Vector3;
+  startTime: number;
+  duration: number; // 450ms
+}
+```
+
+### Focus Animation
+
+When focusing on a target:
+
+```typescript
+const offset = currPos.clone().sub(currTarget);
+const dir = offset.length() > 0.0001
+  ? offset.clone().normalize()
+  : new Vector3(0, 1, 0);
+endPos = endTarget.clone().add(dir.multiplyScalar(12));
+```
+
+Maintains the current viewing direction but moves to 12 units from the target.
+
+### Reset Animation
+
+When resetting:
+
+```typescript
+endTarget = new Vector3(0, 0, 0);
+endPos = new Vector3(...defaultCamPos);
+```
+
+Returns to default position looking at origin.
+
+### Frame Update
+
+```typescript
+useFrame((state) => {
+  const anim = animRef.current;
+  if (!anim) return;
+  
+  const now = performance.now();
+  const t = Math.min(1, (now - anim.startTime) / anim.duration);
+  
+  state.camera.position.lerpVectors(anim.startPos, anim.endPos, t);
+  const newTarget = anim.startTarget.clone().lerp(anim.endTarget, t);
+  
+  if (state.controls?.target) {
+    state.controls.target.copy(newTarget);
+  }
+  state.controls?.update?.();
+  
+  if (t >= 1) animRef.current = null;
+});
+```
+
+Linear interpolation over 450ms for smooth transitions.
+
+---
+
+## PhysicsUpdate
+
+**File**: `src/Utils/PhysicsUpdate.tsx`
+
+Core physics simulation loop that updates particle positions, velocities, and handles event triggers.
+
+### Props
+
+```typescript
+interface PhysicsUpdateProps {
+  parts: PData[];
+  physicsRefs: MutableRefObject<Record<number, LiveData>>;
+  meshRefs: MutableRefObject<Record<number, Mesh>>;
+  run: boolean;
+  dT: number;
+  grav: boolean;
+  friction: number;
+  onPause: () => void;
+  onUpdateParticle: (id: number, data: any) => void;
+  onEventTriggered: (particleId: number, eventId: number) => void;
+}
+```
+
+### LiveData Interface
+
+```typescript
+export interface LiveData {
+  pos: [number, number, number];
+  vel: [number, number, number];
+  acc: [number, number, number]; // Previous frame acceleration
+  t: number;
+  trail: [number, number, number][];
+  frameCount: number;
+}
+```
+
+### Integration Method: Velocity Verlet
+
+The component uses the Velocity Verlet algorithm for numerical integration:
+
+**Step 1: Update Position**
+```typescript
+posFinal = [
+  live.pos[0] + live.vel[0] * dT + 0.5 * accOld[0] * dT * dT,
+  live.pos[1] + live.vel[1] * dT + 0.5 * accOld[1] * dT * dT,
+  live.pos[2] + live.vel[2] * dT + 0.5 * accOld[2] * dT * dT,
+];
+```
+
+**Step 2: Calculate New Acceleration**
+```typescript
+const sumF = p.forces.reduce((acc, f) => {
+  const fx = evaluarFormula(f.vec[0], nt, posFinal[0], posFinal[1], posFinal[2]);
+  const fy = evaluarFormula(f.vec[1], nt, posFinal[0], posFinal[1], posFinal[2]);
+  const fz = evaluarFormula(f.vec[2], nt, posFinal[0], posFinal[1], posFinal[2]);
+  return [acc[0] + fx, acc[1] + fy, acc[2] + fz];
+}, [0, 0, 0]);
+
+accNew = [
+  (sumF[0] + fricX) / m,
+  (sumF[1] + fricY) / m,
+  sumF[2] / m - g_val,
+];
+```
+
+**Step 3: Update Velocity**
+```typescript
+velFinal = [
+  live.vel[0] + 0.5 * (accOld[0] + accNew[0]) * dT,
+  live.vel[1] + 0.5 * (accOld[1] + accNew[1]) * dT,
+  live.vel[2] + 0.5 * (accOld[2] + accNew[2]) * dT,
+];
+```
+
+### Massless Particles
+
+For massless particles (isMassless=true), position is computed directly from trajectory formulas:
+
+```typescript
+if (p.isMassless) {
+  const nx = p.p0_fis[0] + evaluarFormula(p.fx, nt, ...) + p.v0_fis[0] * nt;
+  const ny = p.p0_fis[1] + evaluarFormula(p.fy, nt, ...) + p.v0_fis[1] * nt;
+  const nz = p.p0_fis[2] + evaluarFormula(p.fz, nt, ...) + p.v0_fis[2] * nt - 0.5 * g_val * nt²;
+  posFinal = [nx, ny, nz];
+}
+```
+
+### Friction Model
+
+Implements both static and kinetic friction:
+
+```typescript
+if (enSuelo && normal > 0 && friction > 0) {
+  const friccionMax = friction * normal;
+  
+  if (vHor > 1e-9) {
+    // Kinetic friction: opposes velocity
+    friccionX = -(vx / vHor) * friccionAplicada;
+    friccionY = -(vy / vHor) * friccionAplicada;
+  } else if (fuerzaHorizontal > 1e-9) {
+    // Static friction: opposes applied force
+    friccionX = -(sumF[0] / fuerzaHorizontal) * friccionAplicada;
+    friccionY = -(sumF[1] / fuerzaHorizontal) * friccionAplicada;
+  }
+}
+```
+
+### Event System
+
+Evaluates particle events each frame:
+
+```typescript
+if (p.events && p.events.length > 0) {
+  p.events.forEach((event) => {
+    if (evaluateEvent(event, posFinal, velFinal, nt)) {
+      onEventTriggered(p.id, event.id);
+      
+      event.actions.forEach((action) => {
+        switch (action.type) {
+          case 'pause':
+            onPause();
+            break;
+          case 'changeColor':
+            onUpdateParticle(p.id, { color: action.payload });
+            break;
+        }
+      });
+    }
+  });
+}
+```
+
+Event conditions support:
+- Variables: `x`, `y`, `z`, `t`, `vx`, `vy`, `vz`, `v` (speed)
+- Operators: `==`, `!=`, `>`, `<`, `>=`, `<=`
+- Logic: AND/OR combinations
+
+### Trail Management
+
+```typescript
+if (live.frameCount % 5 === 0) {
+  live.trail = [
+    ...live.trail,
+    [posFinal[1], posFinal[2], posFinal[0]] as [number, number, number],
+  ].slice(-200) as [number, number, number][];
+}
+```
+
+Trail points are added every 5 frames and limited to the last 200 points.
+
+### Mesh Update
+
+```typescript
+if (meshRefs.current[p.id]) {
+  meshRefs.current[p.id].position.set(
+    posFinal[1],
+    posFinal[2],
+    posFinal[0]
+  );
+}
+```
+
+Directly updates the Three.js mesh position without triggering React re-renders.
+
+## Summary
+
+These visualization components work together to provide:
+- **Real-time force visualization** with multiple display modes
+- **Coordinate axes** for spatial reference
+- **Particle trails** showing motion history
+- **Smooth camera animations** for focusing on particles
+- **Accurate physics simulation** using Velocity Verlet integration
+- **Event-driven interactions** for dynamic simulations

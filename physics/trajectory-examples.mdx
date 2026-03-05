@@ -1,0 +1,756 @@
+---
+title: 'Trajectory Examples'
+description: 'Real-world particle trajectory examples with complete configurations'
+icon: 'diagram-project'
+---
+
+## Overview
+
+This page showcases real trajectory patterns from Particle Simulator, extracted directly from the codebase. Each example includes the complete particle configuration: initial position, velocity, forces, and mass.
+
+<Note>
+All examples below are taken from the default scene (`default.json`) and the project README. You can copy these configurations directly into your simulator!
+</Note>
+
+## Featured Trajectory Patterns
+
+These examples are specifically highlighted in the README as "Pro Formula Examples":
+
+<CardGroup cols={2}>
+  <Card title="Lissajous Resonance" icon="infinity" color="#ff00ff">
+    Anisotropic harmonic oscillator with Z modulation
+  </Card>
+  
+  <Card title="Hyperbolic Damping" icon="wave-sine" color="#00ccff">
+    Damped oscillation with bounded nonlinear forcing
+  </Card>
+  
+  <Card title="Pulsing Vortex" icon="tornado" color="#ffc107">
+    Time-varying rotational force creating expanding/contracting spirals
+  </Card>
+  
+  <Card title="Inverse-Square Gravity" icon="atom" color="#4ecdc4">
+    Central force following 1/r² law (orbital mechanics)
+  </Card>
+</CardGroup>
+
+---
+
+## 1. Lissajous Resonance
+
+An anisotropic harmonic oscillator with sinusoidal Z-axis modulation creates beautiful 3D Lissajous curves.
+
+### Force Formulas
+
+```javascript
+Fx: -x
+Fy: -2.25 * y
+Fz: sin(t * 0.5) * 5
+```
+
+### Complete Configuration
+
+```json
+{
+  "mass": 5,
+  "p0_fis": [20, 0, 0],
+  "v0_fis": [0, 8, 0],
+  "forces": [
+    {
+      "id": 1,
+      "vec": [
+        "-x",
+        "-2.25 * y",
+        "sin(t * 0.5) * 5"
+      ]
+    }
+  ]
+}
+```
+
+### Physics Explanation
+
+<Tabs>
+  <Tab title="X-Y Behavior">
+    **Independent oscillators with different frequencies:**
+    
+    - `Fx = -x`: Simple harmonic oscillator, frequency ω₁ = √(k/m) = √(1/5)
+    - `Fy = -2.25 * y`: Faster oscillator, frequency ω₂ = √(2.25/5) = 1.5 × ω₁
+    
+    **Frequency ratio:** ω₂/ω₁ = 1.5 = 3/2
+    
+    This 3:2 resonance creates a **Lissajous figure** in the XY plane - the path traces out a figure-eight or pretzel shape that repeats every 4 cycles.
+    
+    Starting from `(20, 0)` with velocity `(0, 8)` provides the initial conditions for a bounded oscillation.
+  </Tab>
+  
+  <Tab title="Z Behavior">
+    **External oscillating force:**
+    
+    - `Fz = sin(t * 0.5) * 5`: Sinusoidal driving force
+    - Slow frequency (0.5 rad/s) compared to XY oscillations
+    - Amplitude of 5 N
+    
+    This creates **vertical oscillations** that are:
+    - Phase-independent from XY motion
+    - Driven (not natural oscillation)
+    - Low frequency, causing slow vertical bobbing
+    
+    The combination creates a 3D trajectory where the 2D Lissajous pattern is lifted and lowered periodically.
+  </Tab>
+  
+  <Tab title="Visual Result">
+    **What you see:**
+    
+    - **XY plane:** Figure-eight or pretzel-shaped path
+    - **Z motion:** Slow vertical oscillation (period ≈ 12.6 seconds)
+    - **3D effect:** The 2D Lissajous pattern "breathes" up and down
+    
+    **Pattern characteristics:**
+    - Closed curves (periodic)
+    - Complex but predictable
+    - Symmetrical
+    - Never escapes to infinity
+    
+    The 3:2 frequency ratio ensures the pattern repeats exactly, creating stable, beautiful trajectories.
+  </Tab>
+</Tabs>
+
+### Variations
+
+<CodeGroup>
+```javascript 2:3 Resonance
+{
+  "forces": [{
+    "vec": [
+      "-x",
+      "-4 * y",           // 2:1 frequency ratio
+      "sin(t * 0.5) * 5"
+    ]
+  }]
+}
+```
+
+```javascript Without Z Modulation
+{
+  "forces": [{
+    "vec": [
+      "-x",
+      "-2.25 * y",
+      "0"                  // Pure 2D Lissajous
+    ]
+  }]
+}
+```
+
+```javascript Faster Z Oscillation
+{
+  "forces": [{
+    "vec": [
+      "-x",
+      "-2.25 * y",
+      "sin(t * 2) * 5"     // Higher frequency
+    ]
+  }]
+}
+```
+</CodeGroup>
+
+---
+
+## 2. Hyperbolic Damping
+
+Damped oscillation with a nonlinear hyperbolic tangent driving force that keeps the motion bounded.
+
+### Force Formulas
+
+```javascript
+Fz: -z * 0.5 + 20 * tanh(sin(t))
+```
+
+### Complete Configuration
+
+```json
+{
+  "mass": 5,
+  "p0_fis": [20, 0, 0],
+  "v0_fis": [0, 8, 0],
+  "forces": [
+    {
+      "id": 1,
+      "vec": [
+        "0",
+        "0",
+        "-z * 0.5 + 20 * tanh(sin(t))"
+      ]
+    }
+  ]
+}
+```
+
+### Physics Explanation
+
+<Tabs>
+  <Tab title="Damping Term">
+    **`-z * 0.5`**: Linear damping force
+    
+    - Opposes motion (negative sign)
+    - Proportional to displacement
+    - Damping coefficient: b = 0.5 N/m
+    
+    This creates a **restoring force** that pulls the particle back toward z = 0, with the strength increasing linearly with distance.
+    
+    **Damping ratio:** ζ = b/(2√(km)) = 0.5/(2√(0×5)) = ∞ (undamped case, since there's no natural spring)
+    
+    Without the external force, this would cause the particle to drift toward the equilibrium at z = 0.
+  </Tab>
+  
+  <Tab title="Driving Term">
+    **`20 * tanh(sin(t))`**: Nonlinear periodic forcing
+    
+    - `sin(t)`: Oscillates between -1 and +1
+    - `tanh(...)`: Hyperbolic tangent bounds output to (-1, 1)
+    - Amplitude: 20 N
+    
+    **Why `tanh`?**
+    
+    The hyperbolic tangent provides:
+    - **Soft saturation:** Smoothly limits force magnitude
+    - **Stability:** Prevents runaway acceleration
+    - **Nonlinearity:** Creates interesting dynamics
+    
+    Result: A smooth, bounded oscillating force that "pushes" the particle up and down but never exceeds ±20 N.
+  </Tab>
+  
+  <Tab title="Combined Effect">
+    **Total force:** `Fz = -z * 0.5 + 20 * tanh(sin(t))`
+    
+    The interplay between damping and driving creates:
+    
+    1. **Equilibrium shifting:** The external force shifts the equilibrium point
+    2. **Bounded motion:** Damping prevents escape, driving prevents settling
+    3. **Phase lag:** Response lags behind the driving force
+    4. **Nonlinear resonance:** `tanh` modifies the response curve
+    
+    **Visual result:**
+    - Smooth vertical oscillations
+    - Slightly asymmetric due to nonlinearity
+    - Stable amplitude (doesn't grow over time)
+    - Complex but natural-looking motion
+  </Tab>
+</Tabs>
+
+### Extended Example from Default Scene
+
+The default scene uses this pattern with XY vortex forces:
+
+```json
+{
+  "mass": 5,
+  "p0_fis": [20, 0, 0],
+  "v0_fis": [0, 8, 0],
+  "forces": [{
+    "vec": [
+      "-x * abs(cos(t*0.2))",
+      "-y * abs(cos(t*0.2))",
+      "-z * 0.5 + 20 * tanh(sin(t + 0.31))"
+    ]
+  }]
+}
+```
+
+Note the phase offset `t + 0.31` for each particle in the circular arrangement!
+
+---
+
+## 3. Pulsing Vortex
+
+A rotational force field whose strength oscillates with time, creating spiraling patterns that expand and contract.
+
+### Force Formulas
+
+```javascript
+Fx: -x * abs(cos(t*0.2))
+Fy: -y * abs(cos(t*0.2))
+```
+
+### Complete Configuration
+
+```json
+{
+  "mass": 5,
+  "p0_fis": [20, 0, 0],
+  "v0_fis": [0, 8, 0],
+  "forces": [
+    {
+      "id": 1,
+      "vec": [
+        "-x * abs(cos(t*0.2))",
+        "-y * abs(cos(t*0.2))",
+        "0"
+      ]
+    }
+  ]
+}
+```
+
+### Physics Explanation
+
+<Tabs>
+  <Tab title="Radial Force">
+    **Base force structure:** `-x` and `-y`
+    
+    These create a **radial inward force** pointing toward the origin:
+    - Magnitude proportional to distance: F ∝ r
+    - Direction: Always toward (0, 0, 0)
+    - 2D force (no Z component)
+    
+    This is a 2D linear spring: `F = -kr` with k = 1 N/m.
+    
+    If the coefficient were constant, this would create simple circular or elliptical orbits in the XY plane.
+  </Tab>
+  
+  <Tab title="Time Modulation">
+    **Modulating factor:** `abs(cos(t*0.2))`
+    
+    - `cos(t*0.2)`: Slow oscillation (period = 10π ≈ 31.4 seconds)
+    - `abs(...)`: Always positive, range [0, 1]
+    
+    **Effect on spring constant:**
+    - k(t) = abs(cos(t*0.2)) oscillates between 0 and 1
+    - **k = 0:** No force (particle drifts in straight line)
+    - **k = 1:** Full force (tight orbit)
+    - **k = 0.5:** Half force (looser orbit)
+    
+    This creates a **breathing effect** where the "spring" gets stronger and weaker.
+  </Tab>
+  
+  <Tab title="Trajectory Pattern">
+    **What happens:**
+    
+    1. **Full force (k=1):** Particle spirals inward
+    2. **Decreasing force:** Spiral loosens, particle moves outward
+    3. **Zero force (k=0):** Particle moves in straight line (tangent to circle)
+    4. **Increasing force:** Particle gets pulled back, begins new spiral
+    5. **Repeat**
+    
+    **Visual result:**
+    - Flower-like spiral pattern
+    - Expands and contracts periodically
+    - Never escapes (force always inward on average)
+    - Creates beautiful looping trajectories
+    
+    The initial velocity `(0, 8)` provides tangential motion that creates the spiral, while the pulsing force creates the expansion/contraction.
+  </Tab>
+</Tabs>
+
+### Real Implementation (20 Particles)
+
+The default scene creates a **circular formation** of 20 particles:
+
+<CodeGroup>
+```javascript Particle 1
+{
+  "id": 9001,
+  "color": "#ff00ff",
+  "mass": 5,
+  "p0_fis": [20, 0, 0],
+  "v0_fis": [0, 8, 0],
+  "forces": [{
+    "vec": [
+      "-x * abs(cos(t*0.2))",
+      "-y * abs(cos(t*0.2))",
+      "-z * 0.5 + 20 * tanh(sin(t + 0.31))"
+    ]
+  }]
+}
+```
+
+```javascript Particle 6 (opposite side)
+{
+  "id": 9006,
+  "color": "#8000ff",
+  "mass": 5,
+  "p0_fis": [0, 20, 0],
+  "v0_fis": [-8, 0, 0],
+  "forces": [{
+    "vec": [
+      "-x * abs(cos(t*0.2))",
+      "-y * abs(cos(t*0.2))",
+      "-z * 0.5 + 20 * tanh(sin(t + 1.88))"
+    ]
+  }]
+}
+```
+
+```javascript Particle 11 (opposite side)
+{
+  "id": 9011,
+  "color": "#0000ff",
+  "mass": 5,
+  "p0_fis": [-20, 0, 0],
+  "v0_fis": [0, -8, 0],
+  "forces": [{
+    "vec": [
+      "-x * abs(cos(t*0.2))",
+      "-y * abs(cos(t*0.2))",
+      "-z * 0.5 + 20 * tanh(sin(t + 3.45))"
+    ]
+  }]
+}
+```
+</CodeGroup>
+
+**Pattern:** 20 particles arranged in a circle (radius 20), each:
+- **Position:** Evenly spaced angles (18° apart)
+- **Velocity:** Tangent to circle (magnitude 8 m/s)
+- **Z phase:** Offset by 0.314 radians (≈ π/10) per particle
+- **Color:** Gradient from magenta → blue → cyan
+
+This creates a **synchronized pulsing vortex** with vertical waves!
+
+---
+
+## 4. Inverse-Square Gravity
+
+A central force following Newton's law of universal gravitation (or Coulomb's law), creating orbital mechanics.
+
+### Force Formulas
+
+```javascript
+Fx: -x / (sqrt(x^2 + y^2 + z^2)^3)
+Fy: -y / (sqrt(x^2 + y^2 + z^2)^3)
+Fz: -z / (sqrt(x^2 + y^2 + z^2)^3)
+```
+
+### Simplified Notation
+
+For a single axis:
+```javascript
+-x / (sqrt(x^2 + y^2 + z^2)^3)
+```
+
+Or using power operator:
+```javascript
+-x / (sqrt(x^2 + y^2 + z^2)**3)
+```
+
+### Complete Configuration
+
+```json
+{
+  "mass": 5,
+  "p0_fis": [20, 0, 0],
+  "v0_fis": [0, 8, 0],
+  "forces": [
+    {
+      "id": 1,
+      "vec": [
+        "-x / (sqrt(x^2 + y^2 + z^2)^3)",
+        "-y / (sqrt(x^2 + y^2 + z^2)^3)",
+        "-z / (sqrt(x^2 + y^2 + z^2)^3)"
+      ]
+    }
+  ]
+}
+```
+
+### Physics Explanation
+
+<Tabs>
+  <Tab title="The Math">
+    **Goal:** Create force `F = -k/r²` pointing toward origin
+    
+    **Step 1:** Calculate distance
+    ```javascript
+    r = sqrt(x^2 + y^2 + z^2)
+    ```
+    
+    **Step 2:** Unit vector toward origin
+    ```javascript
+    r̂ = -[x, y, z] / r = -[x/r, y/r, z/r]
+    ```
+    
+    **Step 3:** Force magnitude
+    ```javascript
+    F_magnitude = k / r²
+    ```
+    
+    **Step 4:** Combine
+    ```javascript
+    F = F_magnitude × r̂ = (k/r²) × (-[x/r, y/r, z/r])
+    ```
+    
+    **Simplify:**
+    ```javascript
+    Fx = -k × x / r³
+       = -x / (sqrt(x^2 + y^2 + z^2)^3)
+    ```
+    
+    (Here k=1 for simplicity)
+  </Tab>
+  
+  <Tab title="Why r³?">
+    **Common question:** "Why divide by r³ instead of r²?"
+    
+    **Answer:** We need both:
+    1. **Direction normalization:** Divide by r (to get unit vector)
+    2. **Inverse-square law:** Divide by r²
+    
+    **Total:** r × r² = r³
+    
+    **Breaking it down:**
+    ```javascript
+    // Direction (unit vector)
+    direction = -x / sqrt(x^2 + y^2 + z^2)
+    
+    // Magnitude (1/r²)
+    magnitude = 1 / (sqrt(x^2 + y^2 + z^2)^2)
+    
+    // Combined
+    force = magnitude × direction
+          = 1/r² × (-x/r)
+          = -x / r³
+    ```
+  </Tab>
+  
+  <Tab title="Orbital Mechanics">
+    **This force creates Kepler orbits!**
+    
+    With the given initial conditions:
+    - **Position:** (20, 0, 0) - distance r₀ = 20
+    - **Velocity:** (0, 8, 0) - perpendicular to position
+    - **Mass:** 5 kg
+    
+    **Orbit properties:**
+    
+    1. **Orbital velocity at r=20:**
+       - v_circular = √(k/r) = √(1/20) ≈ 0.224 m/s
+       - Given v = 8 m/s >> v_circular
+       - **Result:** Hyperbolic escape trajectory!
+    
+    2. **Energy:**
+       - Kinetic: KE = ½mv² = ½(5)(64) = 160 J
+       - Potential: PE = -k/r = -1/20 = -0.05 J
+       - Total: E = 160 - 0.05 > 0
+       - **Positive energy = escape orbit**
+    
+    3. **What you'll see:**
+       - Particle approaches origin
+       - Curves around it (periapsis)
+       - Flies off to infinity
+       - Never returns (open orbit)
+    
+    **For a closed circular orbit at r=20:**
+    ```json
+    "v0_fis": [0, 0.224, 0]
+    ```
+  </Tab>
+</Tabs>
+
+### Variations for Different Orbits
+
+<CodeGroup>
+```javascript Circular Orbit
+{
+  "p0_fis": [20, 0, 0],
+  "v0_fis": [0, 0.224, 0],  // v = √(k/r)
+  "forces": [{
+    "vec": [
+      "-x / (sqrt(x^2 + y^2 + z^2)^3)",
+      "-y / (sqrt(x^2 + y^2 + z^2)^3)",
+      "-z / (sqrt(x^2 + y^2 + z^2)^3)"
+    ]
+  }]
+}
+```
+
+```javascript Elliptical Orbit
+{
+  "p0_fis": [20, 0, 0],
+  "v0_fis": [0, 0.4, 0],    // Between circular and escape
+  "forces": [{
+    "vec": [
+      "-x / (sqrt(x^2 + y^2 + z^2)^3)",
+      "-y / (sqrt(x^2 + y^2 + z^2)^3)",
+      "-z / (sqrt(x^2 + y^2 + z^2)^3)"
+    ]
+  }]
+}
+```
+
+```javascript Stronger Gravity
+{
+  "forces": [{
+    "vec": [
+      "-10 * x / (sqrt(x^2 + y^2 + z^2)^3)",
+      "-10 * y / (sqrt(x^2 + y^2 + z^2)^3)",
+      "-10 * z / (sqrt(x^2 + y^2 + z^2)^3)"
+    ]
+  }]
+}
+// Multiply by constant to increase gravitational parameter
+```
+
+```javascript With Singularity Protection
+{
+  "forces": [{
+    "vec": [
+      "-x / (sqrt(x^2 + y^2 + z^2 + 0.1)^3)",
+      "-y / (sqrt(x^2 + y^2 + z^2 + 0.1)^3)",
+      "-z / (sqrt(x^2 + y^2 + z^2 + 0.1)^3)"
+    ]
+  }]
+}
+// Add epsilon to prevent division by zero near origin
+```
+</CodeGroup>
+
+---
+
+## Additional Trajectory Types
+
+### Helix (Kinematic Mode)
+
+Using kinematic mode for precise parametric control:
+
+```json
+{
+  "isMassless": true,
+  "p0_fis": [0, 0, 0],
+  "fx": "10 * cos(t)",
+  "fy": "10 * sin(t)",
+  "fz": "t * 2"
+}
+```
+
+**Creates:** A helix rising at constant rate with radius 10.
+
+### Damped Oscillator
+
+```json
+{
+  "mass": 1,
+  "p0_fis": [10, 0, 0],
+  "v0_fis": [0, 0, 0],
+  "forces": [{
+    "vec": ["-x * 2", "0", "0"]
+  }]
+}
+```
+
+**Creates:** Simple harmonic motion along X axis.
+
+### Chaotic Attractor
+
+```json
+{
+  "mass": 5,
+  "p0_fis": [1, 1, 1],
+  "v0_fis": [0, 0, 0],
+  "forces": [{
+    "vec": [
+      "-x + y",
+      "-y + z",
+      "-z + x"
+    ]
+  }]
+}
+```
+
+**Creates:** Coupled oscillators with complex, quasi-chaotic behavior.
+
+---
+
+## Configuration Parameters Reference
+
+<ResponseField name="mass" type="number" required>
+  Mass of the particle in kilograms (only used in dynamic mode)
+</ResponseField>
+
+<ResponseField name="p0_fis" type="[number, number, number]" required>
+  Initial position vector [x, y, z] in meters
+</ResponseField>
+
+<ResponseField name="v0_fis" type="[number, number, number]" required>
+  Initial velocity vector [vx, vy, vz] in m/s
+</ResponseField>
+
+<ResponseField name="forces" type="Force[]" required>
+  Array of force objects (dynamic mode only)
+  
+  Each force has:
+  - `id`: Unique identifier
+  - `vec`: Three-element array of formula strings [Fx, Fy, Fz]
+</ResponseField>
+
+<ResponseField name="isMassless" type="boolean">
+  If `true`, switches to kinematic mode where formulas define position directly
+</ResponseField>
+
+<ResponseField name="fx, fy, fz" type="string">
+  Position functions of time (kinematic mode only)
+</ResponseField>
+
+<ResponseField name="color" type="string">
+  Hex color code for the particle (e.g., `"#ff00ff"`)
+</ResponseField>
+
+---
+
+## Tips for Creating Trajectories
+
+<CardGroup cols={2}>
+  <Card title="Start Simple" icon="seedling">
+    Begin with basic forces like `-x`, `-y`, `-z` and add complexity incrementally
+  </Card>
+  
+  <Card title="Match Initial Conditions" icon="bullseye">
+    Position and velocity should be compatible with your force for desired orbit
+  </Card>
+  
+  <Card title="Use Symmetry" icon="reflect-horizontal">
+    Symmetric forces create predictable, repeating patterns
+  </Card>
+  
+  <Card title="Combine Patterns" icon="layer-group">
+    Mix time-dependent and position-dependent forces for rich dynamics
+  </Card>
+  
+  <Card title="Watch for Instability" icon="triangle-exclamation">
+    Avoid forces that grow unbounded (e.g., `x^2` without negative sign)
+  </Card>
+  
+  <Card title="Test Incremental" icon="flask">
+    Change one parameter at a time to understand its effect
+  </Card>
+</CardGroup>
+
+<Warning>
+**Avoid singularities!** Add small epsilon values to denominators:
+```javascript
+// Bad: Can divide by zero
+sqrt(x^2 + y^2 + z^2)
+
+// Good: Protected
+sqrt(x^2 + y^2 + z^2 + 0.1)
+```
+</Warning>
+
+---
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Force Equations" icon="function" href="/physics/force-equations">
+    Deep dive into force formula syntax
+  </Card>
+  
+  <Card title="Available Functions" icon="calculator" href="/physics/available-functions">
+    Complete function reference
+  </Card>
+  
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Create your first simulation
+  </Card>
+</CardGroup>

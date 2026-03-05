@@ -1,0 +1,336 @@
+---
+title: Installation
+description: Set up Particle Simulator locally for development and customization
+---
+
+## Prerequisites
+
+Before installing Particle Simulator, ensure you have the following installed:
+
+<CardGroup cols={2}>
+  <Card title="Node.js" icon="node-js">
+    **Version 18.0 or higher**
+    
+    Download from [nodejs.org](https://nodejs.org/)
+  </Card>
+  
+  <Card title="Package Manager" icon="box">
+    **npm, yarn, or pnpm**
+    
+    npm comes with Node.js
+  </Card>
+</CardGroup>
+
+<Note>
+  Check your Node.js version with `node --version`. If you need to upgrade, consider using [nvm](https://github.com/nvm-sh/nvm) (Node Version Manager).
+</Note>
+
+## Clone the Repository
+
+First, clone the Particle Simulator repository from GitHub:
+
+```bash
+git clone https://github.com/yourusername/particle-simulator.git
+cd particle-simulator
+```
+
+<Tip>
+  Alternatively, you can download the ZIP file from GitHub and extract it to your desired location.
+</Tip>
+
+## Install Dependencies
+
+Install all required packages using your preferred package manager:
+
+<CodeGroup>
+
+```bash npm
+npm install
+```
+
+```bash yarn
+yarn install
+```
+
+```bash pnpm
+pnpm install
+```
+
+</CodeGroup>
+
+This will install all dependencies defined in `package.json`:
+
+### Runtime Dependencies
+
+- **react** (^19.2.0) - UI framework
+- **react-dom** (^19.2.0) - React renderer for web
+- **three** (^0.182.0) - 3D graphics library
+- **@react-three/fiber** (^9.5.0) - React renderer for Three.js
+- **@react-three/drei** (^10.7.7) - Useful helpers for react-three-fiber
+
+### Development Dependencies
+
+- **typescript** (~5.9.3) - TypeScript compiler
+- **vite** (^7.2.4) - Build tool and dev server
+- **@vitejs/plugin-react** (^5.1.1) - Vite plugin for React
+- **eslint** (^9.39.1) - Code linting
+- **@types/react** (^19.2.5) - React type definitions
+- **@types/react-dom** (^19.2.3) - React DOM type definitions
+- **@types/node** (^24.10.1) - Node.js type definitions
+
+## Development Server
+
+Start the development server with hot module replacement:
+
+<CodeGroup>
+
+```bash npm
+npm run dev
+```
+
+```bash yarn
+yarn dev
+```
+
+```bash pnpm
+pnpm dev
+```
+
+</CodeGroup>
+
+The application will start and be available at:
+
+```
+http://localhost:5173
+```
+
+<Note>
+  The port number may differ if 5173 is already in use. Check the terminal output for the actual URL.
+</Note>
+
+### Development Features
+
+- **Hot Module Replacement (HMR)**: Changes to code automatically update in the browser without full reload
+- **Fast Refresh**: React components update without losing state
+- **TypeScript**: Full type checking in development
+- **Source Maps**: Debug with original source code
+
+## Build for Production
+
+Create an optimized production build:
+
+<CodeGroup>
+
+```bash npm
+npm run build
+```
+
+```bash yarn
+yarn build
+```
+
+```bash pnpm
+pnpm build
+```
+
+</CodeGroup>
+
+This command:
+
+1. Runs TypeScript compiler (`tsc -b`) to check for type errors
+2. Builds the application with Vite (`vite build`)
+3. Outputs optimized files to the `dist/` directory
+
+### Build Output
+
+The production build includes:
+
+- Minified JavaScript bundles
+- Optimized CSS
+- Compressed assets
+- Source maps for debugging
+
+## Preview Production Build
+
+Test the production build locally before deploying:
+
+<CodeGroup>
+
+```bash npm
+npm run preview
+```
+
+```bash yarn
+yarn preview
+```
+
+```bash pnpm
+pnpm preview
+```
+
+</CodeGroup>
+
+This starts a local static file server serving the files from `dist/`.
+
+## Project Structure
+
+After installation, your project structure will look like this:
+
+```text
+particle-simulator/
+├── src/
+│   ├── App.tsx              # Main application component
+│   ├── main.tsx             # Application entry point
+│   ├── index.css            # Global styles
+│   ├── gui/                 # UI components
+│   │   ├── GUI.tsx          # Main control panel
+│   │   ├── InfoPanel.tsx    # Statistics display
+│   │   ├── ParticleEditor.tsx # Particle configuration
+│   │   └── stylesGui.css    # GUI styles
+│   ├── Particula/           # Core physics engine
+│   │   ├── Escenario.tsx    # 3D scene setup
+│   │   ├── Movimiento.ts    # Physics calculations
+│   │   └── Particula.tsx    # Particle component
+│   └── Utils/               # Helper utilities
+│       ├── Axes.tsx         # Coordinate axes
+│       ├── ForceArrow.tsx   # Force visualization
+│       ├── ForceVisualizer.tsx
+│       ├── ParticleGroup.tsx
+│       ├── ParticleInfo.tsx
+│       ├── PhysicsUpdate.tsx # Physics loop
+│       ├── SmoothCameraFocus.tsx
+│       └── index.ts
+├── public/
+│   └── default.json         # Example configuration
+├── package.json             # Project dependencies
+├── tsconfig.json            # TypeScript configuration
+├── vite.config.ts           # Vite configuration
+└── eslint.config.js         # ESLint configuration
+```
+
+## Linting
+
+Run ESLint to check code quality:
+
+<CodeGroup>
+
+```bash npm
+npm run lint
+```
+
+```bash yarn
+yarn lint
+```
+
+```bash pnpm
+pnpm lint
+```
+
+</CodeGroup>
+
+The linter checks for:
+- TypeScript type errors
+- React best practices
+- Code style issues
+- Potential bugs
+
+## Development Tips
+
+### TypeScript Configuration
+
+The project uses strict TypeScript settings for type safety. Key configurations in `tsconfig.json`:
+
+- Strict null checks enabled
+- No implicit any
+- Strict function types
+- Module resolution: bundler
+
+### Vite Configuration
+
+Vite is configured with the React plugin for optimal development experience:
+
+```typescript
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+})
+```
+
+### Hot Module Replacement
+
+When you modify files:
+
+- **React components**: Fast refresh preserves component state
+- **CSS files**: Styles update instantly
+- **TypeScript files**: Full page reload after compilation
+
+## Troubleshooting
+
+### Port Already in Use
+
+If port 5173 is occupied:
+
+```bash
+# Specify a different port
+npm run dev -- --port 3000
+```
+
+### TypeScript Errors
+
+If you encounter TypeScript errors:
+
+```bash
+# Clear TypeScript cache
+rm -rf node_modules/.cache
+
+# Rebuild
+npm run build
+```
+
+### Dependency Issues
+
+If packages are not installing correctly:
+
+```bash
+# Clear cache and reinstall
+rm -rf node_modules package-lock.json
+npm install
+```
+
+### Performance Issues
+
+For slow build times:
+
+1. Ensure you're using the latest Node.js version
+2. Close unnecessary applications
+3. Try increasing Node memory:
+   ```bash
+   export NODE_OPTIONS=--max_old_space_size=4096
+   npm run dev
+   ```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start Guide" icon="rocket" href="/quickstart">
+    Create your first particle simulation
+  </Card>
+  
+  <Card title="Configuration" icon="sliders" href="/guides/configuration">
+    Learn about particle properties and settings
+  </Card>
+  
+  <Card title="Data Structures" icon="book" href="/reference/particle-data">
+    Explore the codebase and data structures
+  </Card>
+  
+  <Card title="Contributing" icon="code-branch" href="/development">
+    Contribute to the project
+  </Card>
+</CardGroup>
+
+<Tip>
+  Join the community and share your simulations! Report issues or suggest features on [GitHub](https://github.com/yourusername/particle-simulator/issues).
+</Tip>
